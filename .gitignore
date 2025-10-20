@@ -1,0 +1,97 @@
+*.csv
+*.o
+*.ko
+.vscode/
+*.dat
+
+# --- Build directories & generators ---
+/build/
+/build-*/
+cmake-build-*/
+CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+/*.ninja
+/.ninja_deps
+/.ninja_log
+/compile_commands.json
+
+# --- Compiled objects & binaries (C/C++) ---
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# --- Debug / profiling / coverage ---
+*.dSYM/
+*.su
+*.gcda
+*.gcno
+*.gcov
+*.prof
+*.profraw
+*.profdata
+gmon.out
+core
+core.*
+
+# --- Logs & run outputs ---
+logs/
+*.log
+out/
+# Keep a README in out/ if you want it tracked
+!out/README.md
+
+# Generated CSVs (keep sources/data samples as you like)
+ts_probe_*.csv
+out/*.csv
+
+# If you generate other data dumps (toggle as needed)
+# *.csv
+
+# --- Python tooling (analysis scripts, venvs, caches) ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+*.egg-info/
+
+# --- Editors/IDEs ---
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+*.bak
+
+# --- OS cruft ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
+
+# --- Misc caches ---
+.cache/
+
