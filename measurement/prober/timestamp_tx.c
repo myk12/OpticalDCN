@@ -211,7 +211,7 @@ int main(int argc, char **argv)
         return -5;
     }
     // header
-    fprintf(log_file, "pkt_seq, pkt_size, t_user_tx_ns, t_hw_tx_ns\n");
+    fprintf(log_file, "pkt_seq,pkt_size,t_user_tx_ns,t_hw_tx_ns\n");
     fflush(log_file);
 
     // send packets

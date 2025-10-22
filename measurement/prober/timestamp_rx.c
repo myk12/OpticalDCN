@@ -156,7 +156,7 @@ int main(int argc, char **argv)
         return -7;
     }
     // header
-    fprintf(log_file, "pkt_seq, pkt_size, t_user_rx_ns, t_hw_rx_ns\n");
+    fprintf(log_file, "pkt_seq,pkt_size,t_user_rx_ns,t_hw_rx_ns\n");
     fflush(log_file);
 
     //------------------------------------------------

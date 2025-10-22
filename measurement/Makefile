@@ -15,10 +15,10 @@ $(TX_TARGET): tx.o
 $(RX_TARGET): rx.o
 	$(CC) rx.o -o $@ $(LDFLAGS)
 
-tx.o: timestamp_tx.c
+tx.o: prober/timestamp_tx.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-rx.o: timestamp_rx.c
+rx.o: prober/timestamp_rx.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean up build artifacts
