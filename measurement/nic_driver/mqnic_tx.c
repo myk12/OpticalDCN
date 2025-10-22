@@ -263,6 +263,8 @@ int mqnic_process_tx_cq(struct mqnic_cq *cq, int napi_budget)
 			printk(KERN_INFO "[mqnic-dbg] TX hardware timestamp requested\n");
 			netdev_dbg(priv->ndev, "%s: TX TS requested", __func__);
 			hwts.hwtstamp = mqnic_read_cpl_ts(interface->mdev, tx_ring, cpl);
+
+			//FIXME: Check if this should be skb_hwtstamp_tx
 			skb_tstamp_tx(tx_info->skb, &hwts);
 		}
 		// free TX descriptor

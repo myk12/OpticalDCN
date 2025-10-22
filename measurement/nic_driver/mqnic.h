@@ -24,11 +24,13 @@
 
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
+#include <linux/tracepoint.h>
 
 #define DRIVER_NAME "mqnic"
 #define DRIVER_VERSION "0.1"
 
 #include "mqnic_hw.h"
+#include "mqnic_trace.h"
 
 #ifdef CONFIG_OF
 /* platform driver OF-related definitions */
@@ -54,6 +56,10 @@ void mqnic_packet_work(struct work_struct *work);
 int mqnic_bulk_send_open(struct net_device *ndev);
 int mqnic_bulk_send_close(struct net_device *ndev);
 void mqnic_send_packet(struct mqnic_bulk_send_work *priv);
+
+
+
+
 
 extern unsigned int mqnic_num_eq_entries;
 extern unsigned int mqnic_num_txq_entries;
@@ -713,6 +719,5 @@ int mqnic_poll_rx_cq(struct napi_struct *napi, int budget);
 
 // mqnic_ethtool.c
 extern const struct ethtool_ops mqnic_ethtool_ops;
-
 
 #endif /* MQNIC_H */

@@ -15,6 +15,8 @@
 #endif
 
 #define CONFIG_PCI
+#define CREATE_TRACE_POINTS
+#include "include/"
 
 MODULE_DESCRIPTION("mqnic driver");
 MODULE_AUTHOR("Alex Forencich");
