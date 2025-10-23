@@ -10,13 +10,13 @@
 #include <linux/reset.h>
 #include <linux/rtc.h>
 
+#define CREATE_TRACE_POINTS
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
 #include <linux/pci-aspm.h>
 #endif
 
 #define CONFIG_PCI
-#define CREATE_TRACE_POINTS
-#include "include/"
 
 MODULE_DESCRIPTION("mqnic driver");
 MODULE_AUTHOR("Alex Forencich");
@@ -535,7 +535,6 @@ static void mqnic_common_remove(struct mqnic_dev *mqnic)
 #ifdef CONFIG_PCI
 static int mqnic_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	printk(KERN_INFO "[mqnic][dbg] Call %s\n", __func__);
 	int ret = 0;
 	struct mqnic_dev *mqnic;
 	struct devlink *devlink;

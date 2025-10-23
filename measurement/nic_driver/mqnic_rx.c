@@ -5,6 +5,8 @@
 
 #include "mqnic.h"
 
+#include "mqnic_ts_probe.h"
+
 struct mqnic_ring *mqnic_create_rx_ring(struct mqnic_if *interface)
 {
 	struct mqnic_ring *ring;
@@ -383,6 +385,18 @@ int mqnic_process_rx_cq(struct mqnic_cq *cq, int napi_budget)
 
 		rx_ring->packets++;
 		rx_ring->bytes += le16_to_cpu(cpl->len);
+
+#ifdef MQNIC_TRACE_TIMESTAMPS
+		// record current timestamp
+		u64 rx_enqueue_ts = mqnic_phc_now_ns(priv->mdev);
+		u32 seq_id = 0;
+		mqnic_pull_seq_from_udp(skb, &seq_id);
+		trace_mqnic_ts_probe_rx_deliver(0, seq_id, rx_enqueue_ts);
+
+		// read TX completion timestamp
+		u64 rx_complete_ts = mqnic_read_cpl_ts(priv->mdev, rx_ring, cpl);
+		trace_mqnic_ts_probe_rx_cpl(0, seq_id, rx_complete_ts);
+#endif
 
 rx_drop:
 		done++;

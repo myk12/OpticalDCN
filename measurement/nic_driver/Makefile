@@ -28,6 +28,11 @@ mqnic-y += mqnic_cq.o
 mqnic-y += mqnic_eq.o
 mqnic-y += mqnic_ethtool.o
 mqnic-y += mqnic_bulk_send.o
+mqnic-y += mqnic_utils.o
+mqnic-y += mqnic_ts_probe.o
+
+# add trace event headers
+ccflags-y += -I$(src)
 
 ifneq ($(DEBUG),)
 ccflags-y += -DDEBUG
@@ -45,7 +50,19 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 
 all: modules
 
-help modules modules_install clean:
+modules: copy_trace_headers
+	$(MAKE) -C $(KDIR) M=$(shell pwd) $@
+
+copy_trace_headers:
+	@cp -f $(shell pwd)/mqnic_ts_probe.h $(KDIR)/include/trace/events/mqnic_ts_probe.h
+
+clean: clean_trace_headers
+	$(MAKE) -C $(KDIR) M=$(shell pwd) $@
+
+clean_trace_headers:
+	@rm -f $(KDIR)/include/trace/events/mqnic_ts_probe.h
+
+help modules_install:
 	$(MAKE) -C $(KDIR) M=$(shell pwd) $@
 
 install: modules_install

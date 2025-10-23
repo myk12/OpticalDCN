@@ -21,7 +21,6 @@ int mqnic_start_port(struct net_device *ndev)
 	int ret;
 	u32 desc_block_size;
 
-	int if_idx = iface->index;
 	netdev_info(ndev, "%s on interface %d", __func__, iface->index);
 
 	netif_set_real_num_tx_queues(ndev, priv->txq_count);
@@ -324,10 +323,6 @@ static int mqnic_open(struct net_device *ndev)
 	struct mqnic_priv *priv = netdev_priv(ndev);
 	struct mqnic_dev *mdev = priv->mdev;
 	int ret = 0;
-
-	// get interface index
-	int if_idx = priv->interface->index;
-	printk(KERN_INFO "[mqnic][myklog][mqnic_open] open interface[%d]\n", if_idx);
 
 	mutex_lock(&mdev->state_lock);
 

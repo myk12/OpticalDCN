@@ -30,7 +30,6 @@
 #define DRIVER_VERSION "0.1"
 
 #include "mqnic_hw.h"
-#include "mqnic_trace.h"
 
 #ifdef CONFIG_OF
 /* platform driver OF-related definitions */
@@ -42,6 +41,7 @@
 
 // default interval to poll port TX/RX status, in ms
 #define MQNIC_LINK_STATUS_POLL_MS 1000
+#define MQNIC_TRACE_TIMESTAMPS
 
 // test work
 struct mqnic_bulk_send_work {
@@ -631,6 +631,7 @@ void mqnic_register_phc(struct mqnic_dev *mdev);
 void mqnic_unregister_phc(struct mqnic_dev *mdev);
 ktime_t mqnic_read_cpl_ts(struct mqnic_dev *mdev, struct mqnic_ring *ring,
 		const struct mqnic_cpl *cpl);
+u64 mqnic_phc_now_ns(struct mqnic_dev *mdev);
 
 // mqnic_i2c.c
 struct mqnic_i2c_bus *mqnic_i2c_bus_create(struct mqnic_dev *mqnic, int index);
@@ -719,5 +720,8 @@ int mqnic_poll_rx_cq(struct napi_struct *napi, int budget);
 
 // mqnic_ethtool.c
 extern const struct ethtool_ops mqnic_ethtool_ops;
+
+// mqnic_utils.c
+int mqnic_pull_seq_from_udp(struct sk_buff *skb, u32 *seq_out);
 
 #endif /* MQNIC_H */

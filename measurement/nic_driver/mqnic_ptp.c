@@ -6,6 +6,23 @@
 #include "mqnic.h"
 #include <linux/version.h>
 
+// This function is used for tracepoint
+// Fast-path PHC read: returns PHC time in nanoseconds
+u64 mqnic_phc_now_ns(struct mqnic_dev *mdev)
+{
+    u32 ns;
+    u64 sec;
+
+    /* first do your reads */
+    ioread32(mdev->phc_rb->regs + MQNIC_RB_PHC_REG_SNAP_FNS);
+
+    ns  = ioread32(mdev->phc_rb->regs + MQNIC_RB_PHC_REG_SNAP_TOD_NS);
+    sec = ioread32(mdev->phc_rb->regs + MQNIC_RB_PHC_REG_SNAP_TOD_SEC_L);
+    sec |= (u64)ioread32(mdev->phc_rb->regs + MQNIC_RB_PHC_REG_SNAP_TOD_SEC_H) << 32;
+
+    return sec * 1000000000ull + ns;
+}
+
 ktime_t mqnic_read_cpl_ts(struct mqnic_dev *mdev, struct mqnic_ring *ring,
 		const struct mqnic_cpl *cpl)
 {

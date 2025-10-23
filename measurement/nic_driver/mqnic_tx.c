@@ -5,6 +5,7 @@
 
 #include <linux/version.h>
 #include "mqnic.h"
+#include "mqnic_ts_probe.h"
 
 struct mqnic_ring *mqnic_create_tx_ring(struct mqnic_if *interface)
 {
@@ -220,7 +221,6 @@ int mqnic_free_tx_buf(struct mqnic_ring *ring)
 
 int mqnic_process_tx_cq(struct mqnic_cq *cq, int napi_budget)
 {
-	printk(KERN_INFO "[mqnic-dbg] TX completion callback %s\n", __func__);
 	struct mqnic_if *interface = cq->interface;
 	struct mqnic_ring *tx_ring = cq->src_ring;
 	struct mqnic_priv *priv = tx_ring->priv;
@@ -258,7 +258,6 @@ int mqnic_process_tx_cq(struct mqnic_cq *cq, int napi_budget)
 		tx_info = &tx_ring->tx_info[ring_index];
 
 		// TX hardware timestamp
-		printk(KERN_INFO "[mqnic-dbg] TX completion CPL received for ring index %u\n", ring_index);
 		if (unlikely(tx_info->ts_requested)) {
 			printk(KERN_INFO "[mqnic-dbg] TX hardware timestamp requested\n");
 			netdev_dbg(priv->ndev, "%s: TX TS requested", __func__);
@@ -267,6 +266,16 @@ int mqnic_process_tx_cq(struct mqnic_cq *cq, int napi_budget)
 			//FIXME: Check if this should be skb_hwtstamp_tx
 			skb_tstamp_tx(tx_info->skb, &hwts);
 		}
+
+#ifdef MQNIC_TRACE_TIMESTAMPS
+		// trace timestamp point : tx_complete
+		ktime_t ts_cpl = mqnic_read_cpl_ts(interface->mdev, tx_ring, cpl);
+		u64 tx_complete_ts = ktime_to_ns(ts_cpl);
+		u32 seq_id = 0;
+		mqnic_pull_seq_from_udp(tx_info->skb, &seq_id);
+		trace_mqnic_ts_probe_tx_cpl(0, seq_id, tx_complete_ts);
+#endif
+
 		// free TX descriptor
 		mqnic_free_tx_desc(tx_ring, ring_index, napi_budget);
 
@@ -510,6 +519,14 @@ netdev_tx_t mqnic_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	// BQL
 	//netdev_tx_sent_queue(ring->tx_queue, tx_info->len);
 	//__netdev_tx_sent_queue(ring->tx_queue, tx_info->len, skb->xmit_more);
+
+	// trace timestamp point : tx_enqueue
+#ifdef MQNIC_TRACE_TIMESTAMPS
+	u64 tx_enqueue_ts = mqnic_phc_now_ns(priv->mdev);
+	u32 seq_id = 0;
+	mqnic_pull_seq_from_udp(skb, &seq_id);
+	trace_mqnic_ts_probe_tx_enqueue(0, seq_id, tx_enqueue_ts);
+#endif
 
 	// enqueue on NIC
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
