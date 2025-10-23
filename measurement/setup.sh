@@ -4,25 +4,19 @@ echo \n"=== === === FPGA Smart Loop Test === === ==="\n
 log_info() {
     local MESSAGE=$1
     local TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    local LOG_FILE="/var/log/my_script.log"
     local COLOR=$(tput setaf 2)  # green
     local RESET=$(tput sgr0)
 
-    mkdir -p "$(dirname "$LOG_FILE")"
-    touch "$LOG_FILE" || { echo "Cannot create log file"; exit 1; }
-    echo "${COLOR}$TIMESTAMP [INFO] $MESSAGE${RESET}" | tee -a "$LOG_FILE"
+    echo "${COLOR}$TIMESTAMP [INFO] $MESSAGE${RESET}"
 }
 
 log_error() {
     local MESSAGE=$1
     local TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    local LOG_FILE="/var/log/my_script.log"
     local COLOR=$(tput setaf 1)  # red
     local RESET=$(tput sgr0)
 
-    mkdir -p "$(dirname "$LOG_FILE")"
-    touch "$LOG_FILE" || { echo "Cannot create log file"; exit 1; }
-    echo "${COLOR}$TIMESTAMP [ERROR] $MESSAGE${RESET}" | tee -a "$LOG_FILE" >&2  # 输出到 stderr
+    echo "${COLOR}$TIMESTAMP [ERROR] $MESSAGE${RESET}"
 }
 
 # network namespace
@@ -65,27 +59,35 @@ done
 log_info "[3] Assgin interface to ns and IP to interface."
 for pair in "$PORTNAME1 $NS1 $IP1" "$PORTNAME2 $NS2 $IP2"; do
     read -r port ns ip <<< "$pair"
+
+    # check if interface is already in the namespace
+    if ! sudo ip netns exec "$ns" ip link show "$port" &> /dev/null; then
+        log_info "Moving Interface $port to namespace $ns."
+    else
+        log_info "Interface $port is already in namespace $ns."
+        continue
+    fi
+
     if ! ip link show "$port" &> /dev/null; then
         log_error "Interface $port does not exist. Please check the interface name."
         exit 1
     fi
 
     # move interface to specified network namespace
-    current_ns=$(ip link show "$port" | grep -o "netns:[0-9]\+" | cut -d: -f2)
-    if [ -n "$current_ns" ]; then
-        target_ns_id=$(ip netns identify "$(ip netns exec "$ns" readlink /proc/self/ns/net)" 2>/dev/null)
-        if [ "$current_ns" = "$target_ns_id" ]; then
-            log_info "Interface $port is already in namespace $ns."
-        else
-            log_info "Moving interface $port to namespace $ns..."
-            sudo ip link set "$port" netns "$ns" || { log_error "Failed to move interface $port to namespace $ns"; exit 1; }
-        fi
-    else
-        log_info "Moving interface $port to namespace $ns..."
-        sudo ip link set "$port" netns "$ns" || { log_error "Failed to move interface $port to namespace $ns"; exit 1; }
-    fi
+    sudo ip link set "$port" down || { log_error "Failed to bring down interface $port"; exit 1; }
+    sudo ip link set "$port" netns "$ns" || { log_error "Failed to move interface $port to namespace $ns"; exit 1; }
+done
 
-    # assign IP address
+# assign IP address
+for pair in "$PORTNAME1 $NS1 $IP_ADDR1" "$PORTNAME2 $NS2 $IP_ADDR2"; do
+    read -r port ns ip <<< "$pair"
+
+    # check if IP is already assigned
+    sudo ip netns exec "$ns" ip addr show "$port" &> /dev/null || {
+        log_error "Interface $port does not exist in namespace $ns."
+        exit 1
+    }
+
     sudo ip netns exec "$ns" ip addr show "$port" | grep -q "$ip" && {
         log_info "IP $ip is already configured on interface $port in namespace $ns."
     } || {
@@ -95,6 +97,9 @@ for pair in "$PORTNAME1 $NS1 $IP1" "$PORTNAME2 $NS2 $IP2"; do
         log_info "Interface $port in namespace $ns configured with IP $ip."
     }
 done
+# extract IPs for testing
+IP1=$(echo $IP_ADDR1 | cut -d'/' -f1)
+IP2=$(echo $IP_ADDR2 | cut -d'/' -f1)
 
 ## 4. Test connectivity
 log_info "Testing connectivity between $IP1 and $IP2..."
@@ -107,7 +112,7 @@ fi
 
 sudo ip netns exec "$NS2" ping -c 3 "$IP1"
 if [ $? -eq 0 ]; then
-    info "Ping from $NS2 ($IP2) to $NS1 ($IP1) succeeded."
+    log_info "Ping from $NS2 ($IP2) to $NS1 ($IP1) succeeded."
 else
-    error "Ping from $NS2 ($IP2) to $NS1 ($IP1) failed."
+    long_error "Ping from $NS2 ($IP2) to $NS1 ($IP1) failed."
 fi

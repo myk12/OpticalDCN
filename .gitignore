@@ -3,6 +3,9 @@
 *.ko
 .vscode/
 *.dat
+*.lock
+*.png
+*.pdf
 
 # --- Build directories & generators ---
 /build/
@@ -95,3 +98,70 @@ desktop.ini
 # --- Misc caches ---
 .cache/
 
+# -----------------------------------------------------------------------------
+# Python & uv
+# -----------------------------------------------------------------------------
+
+# Virtual Environments
+# uv defaults to creating virtual environments in .venv
+.venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+.Python
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# -----------------------------------------------------------------------------
+# Test & Coverage Reports
+# -----------------------------------------------------------------------------
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# -----------------------------------------------------------------------------
+# Environment & Secrets
+# -----------------------------------------------------------------------------
+# Ignore environment files, which often contain secrets.
+# Do NOT check secrets into Git.
+.env
+.env.*
+*.env
+
+# -----------------------------------------------------------------------------
+# IDE & Editor Directories
+# -----------------------------------------------------------------------------
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# -----------------------------------------------------------------------------
+# OS-specific files
+# -----------------------------------------------------------------------------
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
