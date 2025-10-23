@@ -70,21 +70,17 @@ int main(int argc, char **argv)
 {
     printf("=*=*=*=*=*=*= start timestamping rx =*=*=*=*=*=*=\n");
     int opt, once = 0;
-    while ((opt = getopt(argc, argv, "1")) != -1)
-    {
-        if (opt == '1')
-        {
+    while ((opt = getopt(argc, argv, "1")) != -1) {
+        if (opt == '1') {
             once = 1;
         }
-        else
-        {
+        else {
             usage(argv[0]);
             return -1;
         }
     }
 
-    if (argc - optind < 3)
-    {
+    if (argc - optind < 3) {
         usage(argv[0]);
         return -1;
     }
@@ -98,27 +94,23 @@ int main(int argc, char **argv)
     //---------------------------------------------
     printf("- creating and initializing socket\n");
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0)
-    {
+    if (fd < 0) {
         perror("Failed to create socket");
         return -2;
     }
 
     // printf("- binding socket to device %s\n", ifname);
-    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname)) < 0)
-    {
+    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname)) < 0) {
         perror("Failed to set socketopt");
         return -3;
     }
 
     // printf("- enabling timestamp\n");
-    if (hwtstamp_enable_rx(fd, ifname) < 0)
-    {
+    if (hwtstamp_enable_rx(fd, ifname) < 0) {
         perror("failed to enable hardware timestamping");
         return -4;
     }
-    if (enable_timestamping(fd) < 0)
-    {
+    if (enable_timestamping(fd) < 0) {
         perror("failed to enable timestamping.");
         return -4;
     }
@@ -128,8 +120,7 @@ int main(int argc, char **argv)
     baddr.sin_port = htons(bind_port);
 
     inet_pton(AF_INET, bind_ip, &baddr.sin_addr);
-    if (bind(fd, (struct sockaddr *)&baddr, sizeof(baddr)) < 0)
-    {
+    if (bind(fd, (struct sockaddr *)&baddr, sizeof(baddr)) < 0) {
         perror("Failed to bind socket");
         return -5;
     }
@@ -139,8 +130,7 @@ int main(int argc, char **argv)
     //-----------------------------------------------
     // open PHC and create a clockid bound to the NIC's PTP clock
     int phc_fd = open(PHC_NAME, O_RDONLY);
-    if (phc_fd < 0)
-    {
+    if (phc_fd < 0) {
         perror("failed to open PHC");
         return -4;
     }
@@ -150,13 +140,12 @@ int main(int argc, char **argv)
     //              LOG FILE
     //------------------------------------------------
     FILE *log_file = fopen(LOG_FILE_NAME, "w");
-    if (!log_file)
-    {
+    if (!log_file) {
         perror("failed to open log file");
         return -7;
     }
     // header
-    fprintf(log_file, "pkt_seq,pkt_size,t_user_rx_ns,t_hw_rx_ns\n");
+    fprintf(log_file, "pkt_seq,pkt_size,t_user_rx_ns\n");
     fflush(log_file);
 
     //------------------------------------------------
@@ -168,13 +157,12 @@ int main(int argc, char **argv)
     struct iovec iov = {0};
     struct msghdr msg = {0};
     struct sockaddr_in src = {0};
-    struct timespec t_user_rx = {0}, t_hw_rx = {0};
+    struct timespec t_user_rx = {0};
     uint32_t pkt_seq = 0;
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
-    while (1)
-    {
+    while (1) {
         iov.iov_base = buf;
         iov.iov_len = sizeof(buf);
         msg.msg_name = &src;
@@ -183,39 +171,23 @@ int main(int argc, char **argv)
         msg.msg_controllen = sizeof(cbuf);
 
         ssize_t n = recvmsg(fd, &msg, 0);
-        if (n < 0)
-        {
+        if (n < 0) {
             perror("failed to recvmsg");
             return -7;
         }
 
-        // record software receive timestamp
-        clock_gettime(phc_clkid, &t_user_rx);
-
-        struct cmsghdr *c;
-        for (c = CMSG_FIRSTHDR(&msg); c; c = CMSG_NXTHDR(&msg, c))
-        {
-            if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_TIMESTAMPING)
-            {
-                struct timespec *ts = (struct timespec *)CMSG_DATA(c);
-                t_hw_rx = ts[2];
-            }
-        }
-
-        if (n >= 4)
-        {
+        if (n >= 4) {
             uint32_t be;
             memcpy(&be, buf, 4);
             pkt_seq = ntohl(be);
         }
 
-        char sip[INET_ADDRSTRLEN] = {0};
-        inet_ntop(AF_INET, &src.sin_addr, sip, sizeof(sip));
+        // record software receive timestamp
+        clock_gettime(phc_clkid, &t_user_rx);
 
-        printf("[RX][%u] t_user_rx=%ld.%09ld, t_hw_rx=%ld.%09ld\n", pkt_seq,
-                t_user_rx.tv_sec, t_user_rx.tv_nsec,
-                t_hw_rx.tv_sec, t_hw_rx.tv_nsec);
-        fprintf(log_file, "%u,%u,%lld,%lld\n", pkt_seq, 100, ns(&t_user_rx), ns(&t_hw_rx));
+        printf("[RX][%u] t_user_rx=%ld.%09ld\n", pkt_seq,
+                t_user_rx.tv_sec, t_user_rx.tv_nsec);
+        fprintf(log_file, "%u,%u,%lld\n", pkt_seq, 100, ns(&t_user_rx));
         fflush(log_file);
         if (once) break;
     }

@@ -9,7 +9,6 @@
 #include <unistd.h>
 
 #include <time.h>  // clock_gettime, struct timespec
-#include <poll.h>  // poll()
 #include <fcntl.h> // open()
 
 #include <arpa/inet.h>  // inet_pthon
@@ -198,8 +197,7 @@ int main(int argc, char **argv)
     msg.msg_iovlen = 1;
 
     // user space sent ts
-    struct timespec t_user_tx = {0}, t_hw_tx = {0};
-    struct pollfd pfd = {.fd = fd, .events = POLLERR};
+    struct timespec t_user_tx = {0};
 
     //-------------------------------------------------
     //          LOG FILE
@@ -211,7 +209,7 @@ int main(int argc, char **argv)
         return -5;
     }
     // header
-    fprintf(log_file, "pkt_seq,pkt_size,t_user_tx_ns,t_hw_tx_ns\n");
+    fprintf(log_file, "pkt_seq,pkt_size,t_user_tx_ns\n");
     fflush(log_file);
 
     // send packets
@@ -232,58 +230,9 @@ int main(int argc, char **argv)
         }
         //printf("- - packet sent seq:%d,ts:%ld.%ld\n", seq, t_user_tx.tv_sec, t_user_tx.tv_nsec);
 
-        // read TX timestamp from errqueue
-        char cbuf[CMSG_SPACE(sizeof(struct timespec[3])) +
-                  CMSG_SPACE(sizeof(struct sock_extended_err))];
-        char junk = 0;
-        struct iovec eiov = {.iov_base = &junk, .iov_len = 1};
-        struct msghdr emsg = {0};
-        emsg.msg_iov = &eiov;
-        emsg.msg_iovlen = 1;
-        emsg.msg_control = cbuf;
-        emsg.msg_controllen = sizeof(cbuf);
-
-        // wait up to 200ms for a timestamp to appear
-        if (poll(&pfd, 1, 200) > 0)
-        {
-            //printf("- - - errmsg received\n");
-            if (recvmsg(fd, &emsg, MSG_ERRQUEUE) < 0)
-            {
-                perror("recvmsg MSG_ERRQUEUE");
-            } else
-            {
-                //printf("- - - parsing msg\n");
-                // parse cmsgs
-                struct sock_extended_err *serr = NULL;
-                for (struct cmsghdr *c = CMSG_FIRSTHDR(&emsg); c; c = CMSG_NXTHDR(&emsg, c))
-                {
-                    if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_TIMESTAMPING)
-                    {
-                        //printf("- - - - get timestamp, matched [SOL_SOCKET, SCM_TIMESTAMPING]\n");
-                        struct timespec *ts = (struct timespec *)CMSG_DATA(c);
-                        t_hw_tx = ts[2]; // raw hardware stamp
-                    }
-                    else if (c->cmsg_level == SOL_IP && c->cmsg_type == IP_RECVERR)
-                    {
-                        serr = (struct sock_extended_err *)CMSG_DATA(c);
-                    }
-                }
-
-                if (!(serr && serr->ee_origin == SO_EE_ORIGIN_TIMESTAMPING))
-                {
-                    fprintf(stderr, "no TS origin on errqueue entry\n");
-                }
-            }
-        }
-        else
-        {
-            fprintf(stderr, "no TX timestamp (timeout)\n");
-        }
-
-        printf("[TX][%u] t_user_tx=%ld.%09ld, t_hw_tx=%ld.%09ld\n", seq,
-                (long)t_user_tx.tv_sec, t_user_tx.tv_nsec,
-                (long)t_hw_tx.tv_sec, t_hw_tx.tv_nsec);
-        fprintf(log_file,"%u,%d,%lld,%lld\n", seq,100,ns(&t_user_tx),ns(&t_hw_tx));
+        printf("[TX][%u] t_user_tx=%ld.%09ld\n", seq,
+                (long)t_user_tx.tv_sec, t_user_tx.tv_nsec);
+        fprintf(log_file,"%u,%d,%lld\n", seq,100,ns(&t_user_tx));
         fflush(stdout);
     }
     return 0;
