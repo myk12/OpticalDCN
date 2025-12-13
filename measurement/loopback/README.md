@@ -33,7 +33,7 @@ This allows us to confirm that the FPGA design, PHYs, and driver are functioning
 
 ## 3. Setup Environments
 
-This project needs to create two seperate network namespaces and assign each of the one interface.
+### 3.1 Create Network Namespaces
 
 Use `setup.bash` to:
 1. create network namesapce

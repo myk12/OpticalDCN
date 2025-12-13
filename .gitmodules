@@ -1,0 +1,3 @@
+[submodule "measurement/vartest"]
+	path = measurement/vartest
+	url = https://github.com/myk12/vartest.git
