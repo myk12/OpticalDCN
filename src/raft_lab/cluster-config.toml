@@ -1,0 +1,42 @@
+# basis information
+title = "Raft Lab Cluster Configuration"
+version = "1.0.0"
+
+[servers]
+  [[servers.node]]
+  name = "node1"
+  id = 1
+  #address = "10.0.1.1"
+  address = "10.0.13.14"  # Test Path
+  port = 7577
+  role = "leader"
+
+  [[servers.node]]
+  name = "node2"
+  id = 2
+  #address = "10.0.2.1"
+  address = "10.0.13.13" # Test Path
+  port = 7577
+  role = "follower"
+
+  [[servers.node]]
+  name = "node3"
+  id = 3
+  #address = "10.0.3.1" # FPGA Path
+  address = "10.0.13.12" # Test Path
+  port = 7577
+  role = "follower"
+
+[settings]
+  heartbeat_interval = 150
+  election_timeout = 300
+  max_log_size = 1048576
+  snapshot_interval = 60000 # in milliseconds
+  log_level = "INFO"
+  enable_metrics = true
+  metrics_port = 9090
+  data_directory = "/var/lib/raft_lab"
+  backup_directory = "/var/backups/raft_lab"
+  retention_policy = "compact"
+  retention_size = 5242880
+  retention_time = 86400 # in seconds
