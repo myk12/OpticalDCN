@@ -1,3 +1,9 @@
 [submodule "measurement/vartest"]
 	path = measurement/vartest
 	url = https://github.com/myk12/vartest.git
+[submodule "infra/nic/fpga-nic/corundum"]
+	path = infra/nic/fpga-nic/corundum
+	url = https://github.com/myk12/corundum.git
+[submodule "src/raft_lab/cornerstone"]
+	path = src/raft_lab/cornerstone
+	url = https://github.com/myk12/cornerstone.git

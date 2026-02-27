@@ -1,0 +1,389 @@
+# Synchronous topology definition for spine-leaf testbed with 8 FPGA boards connected to a single Tofino switch.
+# This topology defines 8 FPGA boards connected via a single Tofino switch
+# in a folded spine-leaf architecture (4 logical leaves + 2 logical spines).
+# Each FPGA board has 2 NIC interfaces installed on 4 physical servers.
+#
+# RULES (v2):
+#   - Leaf groups: 1–4, 5–8, 9–12, 13–16
+#   - Within each leaf: odd ports are uplinks (to spines), even ports are downlinks (to FPGA)
+#   - Spine1 group: 17–20 connects to leaf uplinks {1,5,9,13}
+#   - Spine2 group: 21–24 connects to leaf uplinks {3,7,11,15}
+#   - Each leaf has two uplinks (to Spine1 and Spine2) for load balancing/ECMP
+#
+#               ┌──────────── Spine1 (17–20) ────────────┐      ┌──────────── Spine2 (21–24) ────────────┐
+#               │ 17↔Leaf1:1   18↔Leaf2:5   19↔Leaf3:9   │      │ 21↔Leaf1:3   22↔Leaf2:7   23↔Leaf3:11  │
+#               │ 20↔Leaf4:13                            │      │ 24↔Leaf4:15                            │
+#               └────────────────────────────────────────┘      └────────────────────────────────────────┘
+#
+#     Leaf1 (1–4)                   Leaf2 (5–8)                   Leaf3 (9–12)                  Leaf4 (13–16)
+#   +----------------+             +----------------+             +----------------+             +----------------+
+#   | 1 →Spine1:17   |             | 5 →Spine1:18   |             | 9  →Spine1:19  |             | 13 →Spine1:20  |
+#   | 2 →FPGA1:p1    |             | 6 →FPGA3:p1    |             | 10 →FPGA5:p1   |             | 14 →FPGA7:p1   |
+#   | 3 →Spine2:21   |             | 7 →Spine2:22   |             | 11 →Spine2:23  |             | 15 →Spine2:24  |
+#   | 4 →FPGA2:p1    |             | 8 →FPGA4:p1    |             | 12 →FPGA6:p1   |             | 16 →FPGA8:p1   |
+#   +----------------+             +----------------+             +----------------+             +----------------+
+#        |      |                       |      |                       |      |                       |      |
+#        |      |                       |      |                       |      |                       |      |
+# Server1 (17.0.1.0/24)          Server2 (17.0.2.0/24)          Server3 (17.0.3.0/24)          Server4 (17.0.4.0/24)
+#   enp202s0np0 → fpga_1:p1         enp202s0np0 → fpga_3:p1         enp202s0np0 → fpga_5:p1         enp202s0np0 → fpga_7:p1
+#   enp177s0np0 → fpga_2:p1         enp177s0np0 → fpga_4:p1         enp177s0np0 → fpga_6:p1         enp177s0np0 → fpga_8:p1
+#   fpga_1: 17.0.1.1(/24)           fpga_3: 17.0.2.1(/24)           fpga_5: 17.0.3.1(/24)           fpga_7: 17.0.4.1(/24)
+#   fpga_2: 17.0.1.3(/24)           fpga_4: 17.0.2.3(/24)           fpga_6: 17.0.3.3(/24)           fpga_8: 17.0.4.3(/24)
+#
+# Notes:
+#   - p2 interfaces on each FPGA are management/control-plane and are not connected to Tofino.
+#   - L2 bring-up uses dst-MAC -> dev_port entries; ARP is bypassed via static neighbors on hosts.
+
+version: 2
+
+testbed:
+  name: "optical-dcn-spineleaf-topo"
+  description: "Spine-leaf topology with 8 FPGA boards connected to a single Tofino2 switch (4 leaves, 2 spines, each leaf has 2 uplinks)."
+
+####################################################################
+#                       Switch Topology                            #
+####################################################################
+switch:
+  name: tofino_1
+  model: tofino2
+  mgmt: {host: 10.0.13.21, username: p4, password_env: TOFINO4_PASSWORD}
+  sde: {version: 9.12.0, install_path: /home/p4/bf-sde-9.12.0}
+  bfshell: /home/p4/bf-sde-9.12.0/install/bin/bfshell
+  sde_env: /home/p4/bf-sde-9.12.0/set_sde.bash
+
+  stages:
+    spines:
+      - id: spine1
+        ports: [spine1_p1, spine1_p2, spine1_p3, spine1_p4]   # 17,18,19,20
+      - id: spine2
+        ports: [spine2_p1, spine2_p2, spine2_p3, spine2_p4]   # 21,22,23,24
+    leaves:
+      - id: leaf1
+        ports: [leaf1_p1, leaf1_p2, leaf1_p3, leaf1_p4]       # 1,2,3,4
+      - id: leaf2
+        ports: [leaf2_p1, leaf2_p2, leaf2_p3, leaf2_p4]       # 5,6,7,8
+      - id: leaf3
+        ports: [leaf3_p1, leaf3_p2, leaf3_p3, leaf3_p4]       # 9,10,11,12
+      - id: leaf4
+        ports: [leaf4_p1, leaf4_p2, leaf4_p3, leaf4_p4]       # 13,14,15,16
+
+  # Topology rule:
+  # - Leaves: odd ports are uplinks (fabric), even ports are downlinks (server).
+  # - Spine1 (17-20) connects to leaf uplinks 1/5/9/13
+  # - Spine2 (21-24) connects to leaf uplinks 3/7/11/15
+  ports:
+    # -----------------------
+    # Spine 1: 17-20 (fabric)
+    # -----------------------
+    - id: spine1_p1
+      role: fabric
+      port: "17/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf1_p1
+
+    - id: spine1_p2
+      role: fabric
+      port: "18/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf2_p1
+
+    - id: spine1_p3
+      role: fabric
+      port: "19/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf3_p1
+
+    - id: spine1_p4
+      role: fabric
+      port: "20/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf4_p1
+
+    # -----------------------
+    # Spine 2: 21-24 (fabric)
+    # -----------------------
+    - id: spine2_p1
+      role: fabric
+      port: "21/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf1_p3
+
+    - id: spine2_p2
+      role: fabric
+      port: "22/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf2_p3
+
+    - id: spine2_p3
+      role: fabric
+      port: "23/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf3_p3
+
+    - id: spine2_p4
+      role: fabric
+      port: "24/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: leaf4_p3
+
+    # -----------------------
+    # Leaf 1: ports 1-4
+    # odd uplinks: 1,3; even downlinks: 2,4
+    # -----------------------
+    - id: leaf1_p1
+      role: fabric
+      port: "1/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine1_p1
+
+    - id: leaf1_p2
+      role: server
+      port: "2/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_1, iface: p1}
+
+    - id: leaf1_p3
+      role: fabric
+      port: "3/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine2_p1
+
+    - id: leaf1_p4
+      role: server
+      port: "4/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_2, iface: p1}
+
+    # -----------------------
+    # Leaf 2: ports 5-8
+    # odd uplinks: 5,7; even downlinks: 6,8
+    # -----------------------
+    - id: leaf2_p1
+      role: fabric
+      port: "5/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine1_p2
+
+    - id: leaf2_p2
+      role: server
+      port: "6/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_3, iface: p1}
+
+    - id: leaf2_p3
+      role: fabric
+      port: "7/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine2_p2
+
+    - id: leaf2_p4
+      role: server
+      port: "8/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_4, iface: p1}
+
+    # -----------------------
+    # Leaf 3: ports 9-12
+    # odd uplinks: 9,11; even downlinks: 10,12
+    # -----------------------
+    - id: leaf3_p1
+      role: fabric
+      port: "9/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine1_p3
+
+    - id: leaf3_p2
+      role: server
+      port: "10/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_5, iface: p1}
+
+    - id: leaf3_p3
+      role: fabric
+      port: "11/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine2_p3
+
+    - id: leaf3_p4
+      role: server
+      port: "12/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_6, iface: p1}
+
+    # -----------------------
+    # Leaf 4: ports 13-16
+    # odd uplinks: 13,15; even downlinks: 14,16
+    # -----------------------
+    - id: leaf4_p1
+      role: fabric
+      port: "13/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine1_p4
+
+    - id: leaf4_p2
+      role: server
+      port: "14/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_7, iface: p1}
+
+    - id: leaf4_p3
+      role: fabric
+      port: "15/0"
+      spec: {speed: 100G, fec: None}
+      pair_with: spine2_p4
+
+    - id: leaf4_p4
+      role: server
+      port: "16/0"
+      spec: {speed: 100G, fec: RS}
+      connected_to: {endpoint: fpga_8, iface: p1}
+
+#####################################################################
+#                       Host Topology                               #
+#####################################################################
+hosts:
+  - id: server1
+    hostname: inet-p4lab-14
+    subnet: 17.0.1.0/24
+    endpoints: [fpga_1, fpga_2]
+  - id: server2
+    hostname: inet-p4lab-13
+    subnet: 17.0.2.0/24
+    endpoints: [fpga_3, fpga_4]
+  - id: server3
+    hostname: inet-p4lab-12
+    subnet: 17.0.3.0/24
+    endpoints: [fpga_5, fpga_6]
+  - id: server4
+    hostname: inet-p4lab-11
+    subnet: 17.0.4.0/24
+    endpoints: [fpga_7, fpga_8]
+
+endpoints:
+  - id: fpga_1
+    hostname: inet-p4lab-14
+    network_interfaces:
+      - id: p1
+        ifname: enp202s0np0
+        netns: ns_fpga_1_p1
+        ip: 17.0.1.1/24
+        mac: 00:0a:35:06:50:94
+        tofino_port: leaf1_p2
+      - id: p2
+        ifname: enp202s0np1
+        netns: ns_fpga_1_p2
+        ip: 17.0.1.2/24
+        mac: 00:0a:35:06:50:95
+        tofino_port: null
+
+  - id: fpga_2
+    hostname: inet-p4lab-14
+    network_interfaces:
+      - id: p1
+        ifname: enp177s0np0
+        netns: ns_fpga_2_p1
+        ip: 17.0.1.3/24
+        mac: 00:0a:35:06:09:24
+        tofino_port: leaf1_p4
+      - id: p2
+        ifname: enp177s0np1
+        netns: ns_fpga_2_p2
+        ip: 17.0.1.4/24
+        mac: 00:0a:35:06:09:25
+        tofino_port: null
+
+  - id: fpga_3
+    hostname: inet-p4lab-13
+    network_interfaces:
+      - id: p1
+        ifname: enp202s0np0
+        netns: ns_fpga_3_p1
+        ip: 17.0.2.1/24
+        mac: 00:0a:35:06:0b:84
+        tofino_port: leaf2_p2
+      - id: p2
+        ifname: enp202s0np1
+        netns: ns_fpga_3_p2
+        ip: 17.0.2.2/24
+        mac: 00:0a:35:06:0b:85
+        tofino_port: null
+
+  - id: fpga_4
+    hostname: inet-p4lab-13
+    network_interfaces:
+      - id: p1
+        ifname: enp177s0np0
+        netns: ns_fpga_4_p1
+        ip: 17.0.2.3/24
+        mac: 00:0a:35:06:09:3c
+        tofino_port: leaf2_p4
+      - id: p2
+        ifname: enp177s0np1
+        netns: ns_fpga_4_p2
+        ip: 17.0.2.4/24
+        mac: 00:0a:35:06:09:3d
+        tofino_port: null
+
+  - id: fpga_5
+    hostname: inet-p4lab-12
+    network_interfaces:
+      - id: p1
+        ifname: enp202s0np0
+        netns: ns_fpga_5_p1
+        ip: 17.0.3.1/24
+        mac: 00:0a:35:06:0b:72
+        tofino_port: leaf3_p2
+      - id: p2
+        ifname: enp202s0np1
+        netns: ns_fpga_5_p2
+        ip: 17.0.3.2/24
+        mac: 00:0a:35:06:0b:73
+        tofino_port: null
+
+  - id: fpga_6
+    hostname: inet-p4lab-12
+    network_interfaces:
+      - id: p1
+        ifname: enp177s0np0
+        netns: ns_fpga_6_p1
+        ip: 17.0.3.3/24
+        mac: 00:0a:35:06:09:9c
+        tofino_port: leaf3_p4
+      - id: p2
+        ifname: enp177s0np1
+        netns: ns_fpga_6_p2
+        ip: 17.0.3.4/24
+        mac: 00:0a:35:06:09:9d
+        tofino_port: null
+
+  - id: fpga_7
+    hostname: inet-p4lab-11
+    network_interfaces:
+      - id: p1
+        ifname: enp202s0np0
+        netns: ns_fpga_7_p1
+        ip: 17.0.4.1/24
+        mac: 00:0a:35:06:09:8a
+        tofino_port: leaf4_p2
+      - id: p2
+        ifname: enp202s0np1
+        netns: ns_fpga_7_p2
+        ip: 17.0.4.2/24
+        mac: 00:0a:35:06:09:8b
+        tofino_port: null
+
+  - id: fpga_8
+    hostname: inet-p4lab-11
+    network_interfaces:
+      - id: p1
+        ifname: enp177s0np0
+        netns: ns_fpga_8_p1
+        ip: 17.0.4.3/24
+        mac: 00:0a:35:06:09:30
+        tofino_port: leaf4_p4
+      - id: p2
+        ifname: enp177s0np1
+        netns: ns_fpga_8_p2
+        ip: 17.0.4.4/24
+        mac: 00:0a:35:06:09:31
+        tofino_port: null
