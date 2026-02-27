@@ -1,0 +1,12 @@
+[project]
+name = "vartest"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "loguru>=0.7.3",
+    "matplotlib>=3.9.4",
+    "pandas>=2.3.3",
+    "seaborn>=0.13.2",
+]

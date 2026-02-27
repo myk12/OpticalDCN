@@ -1,0 +1,99 @@
+# ==============================================================================
+# Tofino Front Panel Topology Visualization
+# Layout: 2 Rows x 16 Columns (QSFP Cage Layout)
+# Top Row: Odd Ports (p1, p3...p31) | Bottom Row: Even Ports (p2, p4...p32)
+# ==============================================================================
+#
+#       [Top Row: Odd Ports]
+#       p1    p3    p5    p7    p9    p11   p13   p15   p17   p19   p21   p23   p25   p27   p29   p31
+#      ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐
+#      │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │
+#      └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘  └─┬┘
+#        \     \     \     \     \     \     \     \     \     \     \     \     \     \     \     |____
+#          \    \     \     \     \     \     \     \     \     \     \     \     \     \     \         │
+#           \    \     \     \     \     \     \     \     \     \     \     \     \     \     \        │
+#            \    \     \     \     \     \     \     \     \     \     \     \     \     \     \       │
+#      ┌─ ┐  ┌──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └──┐  └─┴┐   |
+#      │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │   |
+#      └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘   |
+#       p2    p4    p6    p8    p10   p12   p14   p16   p18   p20   p22   p24   p26   p28   p30   p32   |
+#       │                                                                                               |
+#     FPGA1                                                                                           FPGA2
+#
+# ------------------------------------------------------------------------------
+# Connection Summary:
+# 1. Standard Links (Shift Right Pattern):
+#    p1->p4,  p3->p6,  p5->p8,  p7->p10, p9->p12, p11->p14, p13->p16
+#    p17->p20, p19->p22, p21->p24, p23->p26, p25->p28, p27->p30, p29->p32
+#
+# 2. Special FPGA Links:
+#    p2_0  <--> FPGA_port1
+#    p31_0 <--> FPGA_port2
+# ==============================================================================
+
+ports:
+  # pipeline 1 ports
+  p1_0 : { conn_id: 1, chnl_id: 0 , FPGA: false}
+  p2_0 : { conn_id: 2, chnl_id: 0 , FPGA: true}
+  p3_0 : { conn_id: 3, chnl_id: 0 , FPGA: false}
+  p4_0 : { conn_id: 4, chnl_id: 0 , FPGA: false}
+  p5_0 : { conn_id: 5, chnl_id: 0 , FPGA: false}
+  p6_0 : { conn_id: 6, chnl_id: 0 , FPGA: false}
+  p7_0 : { conn_id: 7, chnl_id: 0 , FPGA: false}
+  p8_0 : { conn_id: 8, chnl_id: 0 , FPGA: false}
+
+  # pipeline 2 ports
+  p9_0 : { conn_id: 9, chnl_id: 0 , FPGA: false}
+  p10_0: { conn_id: 10, chnl_id: 0 , FPGA: false}
+  p11_0: { conn_id: 11, chnl_id: 0 , FPGA: false}
+  p12_0: { conn_id: 12, chnl_id: 0 , FPGA: false}
+  p13_0: { conn_id: 13, chnl_id: 0 , FPGA: false}
+  p14_0: { conn_id: 14, chnl_id: 0 , FPGA: false}
+  p15_0: { conn_id: 15, chnl_id: 0 , FPGA: false}
+  p16_0: { conn_id: 16, chnl_id: 0 , FPGA: false}
+
+  # pipeline 3 ports
+  p17_0: { conn_id: 17, chnl_id: 0 , FPGA: false}
+  p18_0: { conn_id: 18, chnl_id: 0 , FPGA: false}
+  p19_0: { conn_id: 19, chnl_id: 0 , FPGA: false}
+  p20_0: { conn_id: 20, chnl_id: 0 , FPGA: false}
+  p21_0: { conn_id: 21, chnl_id: 0 , FPGA: false}
+  p22_0: { conn_id: 22, chnl_id: 0 , FPGA: false}
+  p23_0: { conn_id: 23, chnl_id: 0 , FPGA: false}
+  p24_0: { conn_id: 24, chnl_id: 0 , FPGA: false}
+
+  # pipeline 0 ports
+  p25_0: { conn_id: 25, chnl_id: 0 , FPGA: false}
+  p26_0: { conn_id: 26, chnl_id: 0 , FPGA: false}
+  p27_0: { conn_id: 27, chnl_id: 0 , FPGA: false}
+  p28_0: { conn_id: 28, chnl_id: 0 , FPGA: false}
+  p29_0: { conn_id: 29, chnl_id: 0 , FPGA: false}
+  p30_0: { conn_id: 30, chnl_id: 0 , FPGA: false}
+  p31_0: { conn_id: 31, chnl_id: 0 , FPGA: true}
+  p32_0: { conn_id: 32, chnl_id: 0 , FPGA: false}
+
+# Control plane configuration
+fwd_rules:
+    bi-directional:
+    # FPGA links
+      - [p2_0, p31_0]
+    # Standard links
+      - [p4_0, p9_0]
+      - [p12_0, p17_0]
+      - [p20_0, p25_0]
+      - [p28_0, p3_0]
+      - [p6_0, p11_0]
+      - [p14_0, p19_0]
+      - [p22_0, p27_0]
+      - [p30_0, p5_0]
+      - [p8_0, p13_0]
+      - [p16_0, p21_0]
+      - [p24_0, p29_0]
+      - [p32_0, p7_0]
+      - [p10_0, p15_0]
+      - [p18_0, p23_0]
+      - [p26_0, p26_0]
+    uni-directional:
+      - [pktgen1, p1_0]
+      - [p18_0, p18_0]
+

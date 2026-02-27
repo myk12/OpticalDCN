@@ -1,0 +1,45 @@
+# Topology mapping for your setup
+# Using the 4th pipeline with front-panel port pairs:
+# (25, 26) -> FPGA
+# (27, 28) -> loop
+# (29, 30) -> loop
+# (31, 32) -> loop
+# We specify CONN_ID/CHNL_ID (channel typically 0). Code will resolve DEV_PORT.
+
+ports:
+  p25_0: { conn_id: 25, chnl_id: 0 , FPGA: true}
+  p26_0: { conn_id: 26, chnl_id: 0 , FPGA: true}
+  p27_0: { conn_id: 27, chnl_id: 0 , FPGA: false}
+  p28_0: { conn_id: 28, chnl_id: 0 , FPGA: false}
+  p29_0: { conn_id: 29, chnl_id: 0 , FPGA: false}
+  p30_0: { conn_id: 30, chnl_id: 0 , FPGA: false}
+  p31_0: { conn_id: 31, chnl_id: 0 , FPGA: false}
+  p32_0: { conn_id: 32, chnl_id: 0 , FPGA: false}
+
+# Optional labeling of pairs for documentation / orchestration
+pairs:
+  - [ p25_0, p26_0 ]  # FPGA ports
+  - [ p27_0, p28_0 ]  # loop ports
+  - [ p29_0, p30_0 ]  # loop ports
+  - [ p31_0, p32_0 ]  # loop ports
+
+# Control plane configuration
+fwd_rules:
+  SINGLE:
+    bi-directional:
+      - [ p25_0, p26_0 ]  # FPGA to FPGA
+    uni-directional:
+      - [pktgen1, p25_0 ] # pktgen to FPGA
+      - [pktgen2, p26_0 ] # pktgen to FPGA
+
+  MULTIPLE:
+    bi-directional:
+      - [ p25_0, p26_0 ]  # FPGA to FPGA
+    uni-directional:
+      - [pktgen1, p27_0 ] # pktgen to loop
+      - [p28_0, p29_0 ] # loop to loop
+      - [p30_0, p31_0 ] # loop to loop
+      - [pktgen2, p28_0 ] # pktgen to loop
+      - [p27_0, p30_0 ] # loop to loop
+      - [p29_0, p32_0 ] # loop to loop
+
