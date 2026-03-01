@@ -1,15 +1,12 @@
 [submodule "measurement/vartest"]
 	path = measurement/vartest
 	url = https://github.com/myk12/vartest.git
-[submodule "infra/nic/fpga-nic/corundum"]
-	path = infra/nic/fpga-nic/corundum
-	url = https://github.com/myk12/corundum.git
-[submodule "src/raft_lab/cornerstone"]
-	path = src/raft_lab/cornerstone
-	url = https://github.com/myk12/cornerstone.git
 [submodule "third_party/NOPaxos"]
 	path = third_party/NOPaxos
 	url = https://github.com/myk12/NOPaxos.git
 [submodule "third_party/cornerstone"]
 	path = third_party/cornerstone
 	url = https://github.com/myk12/cornerstone.git
+[submodule "infra/fpga_nic/corundum"]
+	path = infra/fpga_nic/corundum
+	url = https://github.com/myk12/corundum.git
