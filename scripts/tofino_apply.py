@@ -21,7 +21,7 @@ MODE_TO_REMOTE = {
     # "nopaxos": "apply_nopaxos_from_yaml.py",
 }
 
-TOFINO_DIR = "infra/tofino-switch"
+TOFINO_DIR = "infra/tofino_switch"
 
 
 def sh(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -35,7 +35,7 @@ def sh(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--topo", default="configs/system-spineleaf-topo.yaml")
+    ap.add_argument("--topo", default="configs/system-topo.yaml")
     ap.add_argument("--mode", default="ports,l2", help="comma-separated: ports,l2,clos,...")
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--remote-dir", default="/tmp/opticaldcn")
@@ -63,7 +63,7 @@ def main():
     sde_env = args.sde_env or topo["switch"].get("sde_env", "")
 
     remote_dir = args.remote_dir.rstrip("/")
-    remote_topo = f"{remote_dir}/system-spineleaf-topo.yaml"
+    remote_topo = f"{remote_dir}/system-topo.yaml"
 
     # Prepare remote dir
     logger.info("Preparing remote dir {}@{}:{}", user, host, remote_dir)

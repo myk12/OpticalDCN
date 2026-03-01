@@ -6,7 +6,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOPO_PATH = os.environ.get("TOPO_PATH", "/tmp/opticaldcn/system-spineleaf-topo.yaml")
+TOPO_PATH = os.environ.get("TOPO_PATH", "/tmp/opticaldcn/system-topo.yaml")
 P4_PROG = os.environ.get("P4_PROG", "spineleaf")  # unused here, but keep interface consistent
 
 

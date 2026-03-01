@@ -25,20 +25,18 @@
 #define IP_PROTOCOL_UDP 17
 #define IP_PROTOCOL_TCP 6
 
-/* ****** Modes *******
- * MODE_L2: simple L2 forwarding based on dst MAC
- * MODE_CLOS_L3: CLOS-style L3 forwarding with logical switch id and hash-based spine selection
- * MODE_NOPAXOS: L3 forwarding following NOPaxos design (not implemented in this code)
- */
-const bit<8> MODE_L2 = 0;
-const bit<8> MODE_CLOS_L3 = 1;
-const bit<8> MODE_NOPAXOS = 2;
+// -------------------------------
+// Modes
+// -------------------------------
+const bit<8> MODE_L2         = 0;
+const bit<8> MODE_L3         = 1;   // v1 Clos (no ECMP)
+const bit<8> MODE_NOPAXOS_V1 = 2;   // host-sequencer phase1 on top of MODE_L3
 
-/* Ingress kinds (where packet comes from) */
-const bit<8> K_UNKNOWN          = 0;
-const bit<8> K_LEAF_DOWNLINK    = 1; // leaf even ports: servers/FPGAs -> leaf switch
-const bit<8> K_LEAF_UPLINK      = 2; // leaf odd ports: leaf switch -> spine
-const bit<8> K_SPINE_PORT       = 3; // spine ports -> leaf uplinks
+// Ingress kinds
+const bit<8> K_UNKNOWN       = 0;   // unknown/unspecified
+const bit<8> K_LEAF_DOWNLINK = 1;   // servers/FPGAs -> leaf switch
+const bit<8> K_LEAF_UPLINK   = 2;   // leaf switch -> spine
+const bit<8> K_SPINE_PORT    = 3;   // spine ports -> leaf uplinks
 
 /* Topology parameters */
 const bit<8> NUM_LEAFS = 4;
@@ -65,6 +63,9 @@ struct header_t {
 }
 
 struct metadata_t {
+    pktgen_timer_header_t pktgen_timer_hdr;
+    bit<1> phase1_override; // Flag to indicate if packet should be treated as Phase 1 (for NOPaxos)
+
     /* Mode selection */
     bit<8> mode; // 0 = MODE_L2, 1 = MODE_CLOS_L3, 2 = MODE_NOPAXOS
     bit<8> mode_key; // Key for mode selection table (can be extended for more complex mode selection)
@@ -81,8 +82,6 @@ struct metadata_t {
     /* ECMP-like spine selection metadata */
     bit<32> hash_seed;      // seed for hash calculation for spine selection
     bit<8> selected_spine;  // selected spine switch based on hash
-
-    pktgen_timer_header_t pktgen_timer_hdr; // Pktgen timer header
 
     /* NOPaxos metadata (for MODE_NOPAXOS) */
     bit<8> is_nopaxos_req;
@@ -160,26 +159,19 @@ parser IngressParser(
     }
 }
 
-// -------------------------------------------
-// Ingress Control: Core Spine-Leaf Logic
-// -------------------------------------------
 control Ingress(
     inout header_t hdr,
     inout metadata_t ig_md,
     in ingress_intrinsic_metadata_t ig_intr_md,
     in ingress_intrinsic_metadata_from_parser_t ig_intr_prsr_md,
     inout ingress_intrinsic_metadata_for_deparser_t ig_intr_dprsr_md,
-    inout ingress_intrinsic_metadata_for_tm_t ig_intr_tm_md) {
-
-    // Define Actions
+    inout ingress_intrinsic_metadata_for_tm_t ig_intr_tm_md)
+{
+    // -------------------------------
+    // Helpers
+    // -------------------------------
     action drop() {
         ig_intr_dprsr_md.drop_ctl = 0x1;
-    }
-
-    action set_port_role(bit<8> kind, bit<8> leaf_id, bit<8> spine_id) {
-        ig_md.ingress_kind = kind;
-        ig_md.ingress_leaf = leaf_id;
-        ig_md.ingress_spine = spine_id;
     }
 
     action set_ucast_port(PortId_t port) {
@@ -190,289 +182,221 @@ control Ingress(
         ig_md.mode = mode;
     }
 
-    /* MODE_L2: simple L2 forwarding based on dst MAC */
-    action l2_forward(PortId_t port) {
-        ig_intr_tm_md.ucast_egress_port = port;
+    // -------------------------------
+    // L2 actions / table
+    // -------------------------------
+    action l2_forward(PortId_t port) { set_ucast_port(port); }
+    action l2_drop() { drop(); }
+
+    table t_l2_forward {
+        key = { hdr.ethernet.dst_addr: exact; }
+        actions = { l2_forward; l2_drop; }
+        size = 1024;
+        // default_action intentionally left unspecified; BFRT can clear/override
     }
 
-    action l2_drop() {
-        drop();
+    // -------------------------------
+    // Port role (required for MODE_L3 / MODE_NOPAXOS_V1)
+    // -------------------------------
+    action set_port_role(bit<8> kind, bit<8> leaf_id, bit<8> spine_id) {
+        ig_md.ingress_kind = kind;
+        ig_md.ingress_leaf = leaf_id;
+        ig_md.ingress_spine = spine_id;
     }
 
-    /* MODE_CLOS_L3: CLOS-style L3 forwarding with logical switch id and hash-based spine selection */
+    table t_port_role {
+        key = { ig_intr_md.ingress_port: exact; }
+        actions = { set_port_role; NoAction; }
+        size = 64;
+        // IMPORTANT: safe default that doesn't kill bring-up
+        // If you want strictness later, you can change this to drop().
+        default_action = set_port_role(K_UNKNOWN, 0, 0);
+    }
+
+    // -------------------------------
+    // MODE selection
+    // -------------------------------
+    table t_mode {
+        key = { ig_md.mode_key: exact; }
+        actions = { set_mode; NoAction; }
+        size = 1;
+        default_action = set_mode(MODE_L2);
+    }
+
+    // -------------------------------
+    // Destination classification (MAC -> dst_leaf + dst_downlink_port)
+    // Used by MODE_L3 and MODE_NOPAXOS_V1
+    // -------------------------------
     action set_dst(bit<8> dst_leaf, PortId_t dst_downlink_port) {
         ig_md.dst_leaf = dst_leaf;
         ig_md.dst_downlink_port = dst_downlink_port;
     }
 
-    /* leaf uplink selection: hash-based ECMP */
-    action set_selected_spine(bit<8> spine_id) {
-        ig_md.selected_spine = spine_id;
-    }
-
-    action set_leaf_uplink_port(PortId_t uplink_port) {
-        ig_intr_tm_md.ucast_egress_port = uplink_port;
-    }
-
-    /* Spine forwarding: forward to selected spine port */
-    action set_spine_egress_port(PortId_t spine_port) {
-        ig_intr_tm_md.ucast_egress_port = spine_port;
-    }
-
-    /* MODE_NOPAXOS: L3 forwarding following NOPaxos design (not implemented in this code) */
-    action mark_nopaxos_req(bit<32> shard, bit<16> epoch, bit<32> seq_num) {
-        ig_md.is_nopaxos_req = 1;
-        ig_md.nopaxos_shard = shard;
-        ig_md.nopaxos_epoch = epoch;
-        ig_md.nopaxos_seq_num = seq_num;
-    }
-
-    action clear_nopaxos_metadata() {
-        ig_md.is_nopaxos_req = 0;
-        ig_md.nopaxos_shard = 0;
-        ig_md.nopaxos_epoch = 0;
-        ig_md.nopaxos_seq_num = 0;
-    }
-
-    action set_multicast_group(MulticastGroupId_t mcast_grp) {
-        ig_md.nopaxos_multicast_group = mcast_grp;
-        ig_intr_tm_md.mcast_grp_a = mcast_grp;
-    }
-
-    /* Allocate seq/epoch and stamp nopaxos header.
-     * NOTE: This is a mimimal "data-plane" sequencer for NOPaxos, 
-     * which does not guarantee consistency across multiple switches 
-     * or multiple pipelines in the same switch.
-     */
-    action nopaxos_sequencer() {
-        bit<16> ep;
-        ep = epoch_reg.read(0);
-        ig_md.nopaxos_epoch = ep;
-
-        bit<32> cur = seq_num_reg.read(ig_md.nopaxos_shard);
-        ig_md.nopaxos_seq_num = cur;
-        seq_num_reg.write(ig_md.nopaxos_shard, cur + 1);
-
-        // Set magic number to identify NOPaxos packets and shard id
-        hdr.nopaxos.setValid();
-        hdr.nopaxos.magic = 0xBEEF; // example magic number
-        hdr.nopaxos.shard = ig_md.nopaxos_shard;
-        hdr.nopaxos.epoch = ig_md.nopaxos_epoch;
-        hdr.nopaxos.seq_num = ig_md.nopaxos_seq_num;
-        hdr.nopaxos.flags = 0; // can be used for additional info (e.g., request type)
-    }
-
-    /* -------------------------------------------
-     *   Tables
-     * ---------------------------------------- */
-    
-    // Port role mapping: dev_port -> (ingress_kind, leaf_id, spine_id)
-    table t_port_role {
-        key = {
-            ig_intr_md.ingress_port: exact;
-        }
-        actions = {
-            set_port_role;
-            drop;
-            NoAction;
-        }
-        size = 64;
-        default_action = drop();
-    }
-
-    // Mode table: mode_key -> mode
-    table t_mode {
-        key = {
-            ig_md.mode_key: exact;
-        }
-        actions = {
-            set_mode;
-            NoAction;
-        }
-        size = 1;
-        default_action = set_mode(MODE_L2); // default to MODE_L2
-    }
-
-    // L2 forwarding table: dst MAC -> egress port
-    table t_l2_forward {
-        key = {
-            hdr.ethernet.dst_addr: exact;
-        }
-        actions = {
-            l2_forward;
-            l2_drop;
-            NoAction;
-        }
-        size = 1024;
-        default_action = l2_drop();
-    }
-
-    // CLOS L3 forwarding: dst leaf -> (dst downlink port)
     table t_dst_mac_classify {
-        key = {
-            hdr.ethernet.dst_addr: exact;
-        }
-        actions = {
-            set_dst;
-        }
+        key = { hdr.ethernet.dst_addr: exact; }
+        actions = { set_dst; }
         size = 1024;
-        default_action = set_dst(0, 0); // default to invalid leaf and port
+        default_action = set_dst(0, (PortId_t)0);
     }
 
-    // leaf uplink selection: (ingress leaf, selected spine) -> uplink dev_port
-    table t_leaf_uplink_select {
-        key = {
-            ig_md.ingress_leaf: exact;
-            ig_md.selected_spine: exact;
-        }
-        actions = {
-            set_leaf_uplink_port;
-        }
-        size = 64;
-        default_action = set_leaf_uplink_port(0); // default to invalid port
+    // -------------------------------
+    // v1 CLOS forwarding tables (NO ECMP)
+    //
+    // leaf_downlink -> remote leaf: send to fixed uplink port for this leaf
+    // key only needs ingress_leaf because each leaf connects to exactly one spine uplink in v1.
+    // -------------------------------
+    action set_leaf_uplink_port(PortId_t uplink_port) {
+        set_ucast_port(uplink_port);
     }
 
-    // spine forwarding: (ingress spine, dst leaf) -> downlink dev_port
+    table t_leaf_uplink_v1 {
+        key = { ig_md.ingress_leaf: exact; }
+        actions = { set_leaf_uplink_port; }
+        size = 16;
+        default_action = set_leaf_uplink_port((PortId_t)0);
+    }
+
+    // spine ingress -> dst_leaf : send out the spine port that leads to that leaf
+    action set_spine_egress_port(PortId_t spine_port) {
+        set_ucast_port(spine_port);
+    }
+
     table t_spine_forward {
         key = {
             ig_md.ingress_spine: exact;
             ig_md.dst_leaf: exact;
         }
-        actions = {
-            set_spine_egress_port;
-        }
+        actions = { set_spine_egress_port; }
         size = 64;
-        default_action = set_spine_egress_port(0); // default to invalid port
+        default_action = set_spine_egress_port((PortId_t)0);
     }
 
-    /* NOPaxos request classify:
-     * - simplest: match UDP dst port
-     */
-    table t_nopaxos_classify {
+    // -------------------------------
+    // NOPaxos v1 Phase-1 (host sequencer)
+    //
+    // Match groupaddr:udp_port traffic and:
+    //  - on client ingress (leaf downlinks): steer to sequencer port
+    //  - on sequencer ingress: multicast (PRE mgid/rid)
+    // -------------------------------
+    action nopaxos_p1_to_sequencer(PortId_t sequencer_port) {
+        set_ucast_port(sequencer_port);
+        ig_md.phase1_override = 1;
+    }
+
+    action nopaxos_p1_to_mcast(MulticastGroupId_t mgid, bit<16> rid) {
+        ig_intr_tm_md.mcast_grp_a = mgid;
+        ig_intr_tm_md.rid = rid;
+        ig_intr_tm_md.enable_mcast_cutthru = 1;
+        ig_md.phase1_override = 1;
+    }
+
+    table t_nopaxos_phase1 {
         key = {
+            ig_intr_md.ingress_port: exact;
             hdr.ipv4.isValid() : exact;
-            hdr.udp.isValid() : exact;
-            hdr.udp.dst_port: exact;
+            hdr.udp.isValid()  : exact;
+            hdr.ipv4.dst_addr  : exact;
+            hdr.udp.dst_port   : exact;
         }
         actions = {
-            mark_nopaxos_req;
-            clear_nopaxos_metadata;
+            nopaxos_p1_to_sequencer;
+            nopaxos_p1_to_mcast;
             NoAction;
         }
         size = 64;
-        default_action = clear_nopaxos_metadata();
+        default_action = NoAction();
     }
 
-    /* Replica multicast mapping: (shard) -> multicast group */
-    table t_replica_multicast {
-        key = {
-            ig_md.nopaxos_shard: exact;
-        }
-        actions = {
-            set_multicast_group;
-        }
-        size = 1024;
-        default_action = set_multicast_group(0); // default to invalid group
-    }
-
-    /* Hash helpers for spine selection */
-    Hash<bit<32>>(HashAlgorithm_t.CRC32) crc32_hash;
-
-    // Ingress processing logic
+    // -------------------------------
+    // Apply
+    // -------------------------------
     apply {
-        // defaults
+        // ---- init metadata ----
         ig_md.mode_key = 0;
+        ig_md.mode = MODE_L2;
+
         ig_md.ingress_kind = K_UNKNOWN;
         ig_md.ingress_leaf = 0;
         ig_md.ingress_spine = 0;
+
         ig_md.dst_leaf = 0;
-        ig_md.dst_downlink_port = 0;
-        ig_md.selected_spine = 0;
-        ig_md.hash_seed = 0;
-        ig_md.is_nopaxos_req = 0;
-        ig_md.nopaxos_shard = 0;
-        ig_md.nopaxos_epoch = 0;
-        ig_md.nopaxos_seq_num = 0;
-        ig_md.nopaxos_multicast_group = 0;
+        ig_md.dst_downlink_port = (PortId_t)0;
 
-        // 1. Identify ingress port role
-        t_port_role.apply();
+        ig_md.phase1_override = 0;
 
-        // 2. Determine processing mode
-        t_mode.apply();
-
+        // Must have ethernet for all modes
         if (!hdr.ethernet.isValid()) {
-            // If no Ethernet header, drop the packet
             drop();
             return;
         }
 
-        // 3. MODE_L2: simple L2 forwarding
+        // Decide mode
+        t_mode.apply();
+
+        // -------------------------
+        // MODE_L2: only L2 table
+        // -------------------------
         if (ig_md.mode == MODE_L2) {
             t_l2_forward.apply();
             return;
         }
 
-        // Common processing for MODE_CLOS_L3 and MODE_NOPAXOS: classify destination and select spine
+        // For MODE_L3 / MODE_NOPAXOS_V1 we need port role + dst classify
+        t_port_role.apply();
         t_dst_mac_classify.apply();
 
-        // Optionally classify NOPaxos requests (for MODE_NOPAXOS)
-        if (hdr.ipv4.isValid() && (hdr.udp.isValid() || hdr.tcp.isValid())) {
-            t_nopaxos_classify.apply();
+        // -------------------------
+        // MODE_NOPAXOS_V1: Phase-1 override first
+        // (only affects groupaddr:udp_port traffic)
+        // -------------------------
+        if (ig_md.mode == MODE_NOPAXOS_V1) {
+            if (hdr.ipv4.isValid() && hdr.udp.isValid()) {
+                t_nopaxos_phase1.apply();
+                if (ig_md.phase1_override == 1) {
+                    return;
+                }
+            }
+            // fall-through to MODE_L3 forwarding for non-phase1 traffic
         }
 
-        // 4. MODE_CLOS_L3: CLOS-style L3 forwarding
-        if (ig_md.mode == MODE_CLOS_L3) {
-            if (ig_md.ingress_kind == K_LEAF_DOWNLINK) {
-                // Packets from leaf downlink: select spine uplink based on hash
-                if (ig_md.dst_leaf == ig_md.ingress_leaf) {
-                    // Destination is in the same leaf, forward to downlink port
-                    set_ucast_port(ig_md.dst_downlink_port);
-                } else {
-                    // Destination is in a different leaf, select spine uplink
-                    // Simple hash: XOR of src/dst IP and ports (if valid)
-                    bit<32> hash_value = crc32_hash.get({
-                        hdr.ethernet.src_addr,
-                        hdr.ethernet.dst_addr,
-                        hdr.ipv4.src_addr,
-                        hdr.ipv4.dst_addr
-                    });
+        // -------------------------
+        // MODE_L3: v1 Clos forwarding (no ECMP)
+        // -------------------------
 
-                    // pick spine 1 or 2 based on hash value
-                    bit<1> sel = (bit<1>)(hash_value & 1); // simple LSB-based selection for 2 spines
-                    bit<8> spine_id = (bit<8>)(sel) + 1; // spine_id = 1 or 2
-                    set_selected_spine(spine_id);
-                    t_leaf_uplink_select.apply();
-                }
-
-                return;
-            }
-
-            if (ig_md.ingress_kind == K_SPINE_PORT) {
-                // Packets from spine: forward to correct leaf downlink
-                t_spine_forward.apply();
-                return;
-            }
-
-            if (ig_md.ingress_kind == K_LEAF_UPLINK) {
-                // Packets from leaf uplink that is spine 
-                set_ucast_port(ig_md.dst_downlink_port); // forward back to the same port (loopback to spine)
-                return;
-            }
-
-            // For unknown ingress kind, drop the packet
-            drop();
+        // Same leaf: directly downlink
+        if (ig_md.dst_leaf != 0 && ig_md.dst_leaf == ig_md.ingress_leaf) {
+            set_ucast_port(ig_md.dst_downlink_port);
             return;
         }
 
-        // 5. MODE_NOPAXOS: NOPaxos-style L3 forwarding (not fully implemented)
-        // Not implemented in this code, but the general idea would be:
-        // - Classify NOPaxos requests using t_nopaxos_classify
-        // - For NOPaxos requests, use nopaxos_sequencer to assign sequence numbers and epochs
-        // - Use t_replica_multicast to determine multicast group for replication
+        // From leaf downlink: send to this leaf's single uplink
+        if (ig_md.ingress_kind == K_LEAF_DOWNLINK) {
+            t_leaf_uplink_v1.apply();
+            // If uplink_port is 0, treat as drop
+            if (ig_intr_tm_md.ucast_egress_port == (PortId_t)0) {
+                drop();
+            }
+            return;
+        }
 
-        // For any other mode, drop the packet
+        // From spine: forward based on dst_leaf
+        if (ig_md.ingress_kind == K_SPINE_PORT) {
+            t_spine_forward.apply();
+            if (ig_intr_tm_md.ucast_egress_port == (PortId_t)0) {
+                drop();
+            }
+            return;
+        }
+
+        // From leaf uplink: in v1, this typically means traffic coming back from spine into a leaf-uplink-facing port.
+        // For simplicity, send to downlink decided by dst_mac_classify.
+        if (ig_md.ingress_kind == K_LEAF_UPLINK) {
+            set_ucast_port(ig_md.dst_downlink_port);
+            return;
+        }
+
         drop();
+        return;
     }
 }
 

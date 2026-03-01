@@ -107,8 +107,9 @@ def main():
     # Save inventory
     (out_dir / "inventory.json").write_text(topo_path.read_text())
 
+    logger.info("Endpoints on this host: {}", local_ep_ids)
     # Apply netns + iface config
-    for eid in local_ep_ids:
+    for eid in local_ep_ids.endpoints:
         ep = topo.endpoints[eid]
         for nic in ep.network_interfaces:
             # Skip mgmt/non-switch interfaces (tofino_port null) if you want

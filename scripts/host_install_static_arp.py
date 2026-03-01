@@ -64,7 +64,7 @@ def main():
     logger.info("global ARP entries: {}", len(ip2mac))
 
     # Install into each local namespace
-    for eid in local_ep_ids:
+    for eid in local_ep_ids.endpoints:
         ep = topo.endpoints[eid]
         for nic in ep.network_interfaces:
             if nic.tofino_port is None:

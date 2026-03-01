@@ -387,3 +387,23 @@ endpoints:
         ip: 17.0.4.4/24
         mac: 00:0a:35:06:09:31
         tofino_port: null
+
+#####################################################
+#         NOPaxos Configuration
+#####################################################
+nopaxos:
+  udp_port: 12000
+  groupaddr: 17.0.0.255
+  sequencer:
+    endpoint: fpga_2
+    iface: p1
+  replicas:
+  - id: replica1
+    endpoint: fpga_1
+    iface: p1
+  - id: replica2
+    endpoint: fpga_3
+    iface: p1
+  - id: replica3
+    endpoint: fpga_5
+    iface: p1
