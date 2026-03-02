@@ -20,7 +20,7 @@ MODE_TO_REMOTE = {
     "nopaxos": "apply_nopaxos_from_yaml.py",
 }
 
-TOFINO_DIR = "infra/tofino_switch"
+TOFINO_DIR = "infra/switch_tofino"
 
 
 def sh(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:

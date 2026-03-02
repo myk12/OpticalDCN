@@ -20,7 +20,7 @@ set -euo pipefail
 # ---- config ----
 NETNS="${NETNS:-ns_fpga_1_p1}"
 CLIENT_BIN="${CLIENT_BIN:-third_party/NOPaxos/bench/client}"
-CONF="${CONF:-infra/server_host/nopaxos/cluster.conf}"
+CONF="${CONF:-infra/host_server/nopaxos/cluster.conf}"
 MODE="${MODE:-nopaxos}"
 
 # per-thread requests
