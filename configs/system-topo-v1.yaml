@@ -404,5 +404,5 @@ nopaxos:
     endpoint: fpga_3
     iface: p1
   - id: replica3
-    endpoint: fpga_5
+    endpoint: fpga_4
     iface: p1
