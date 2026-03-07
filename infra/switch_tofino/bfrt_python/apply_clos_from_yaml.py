@@ -5,10 +5,8 @@ import yaml
 TOPO_PATH = os.environ.get("TOPO_PATH", "/tmp/opticaldcn/system-topo.yaml")
 P4_PROG = os.environ.get("P4_PROG", "spineleaf")
 
-# Must match your P4 constants
+# Constants for CLOS mode, must be consistent with the P4 program
 MODE_CLOS = 1
-
-# Must match your P4 constants
 K_DOWNLINK = 1
 K_LEAF_UPLINK = 2
 K_SPINE_PORT = 3

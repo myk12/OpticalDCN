@@ -17,7 +17,8 @@ MODE_TO_REMOTE = {
     "ports" : "apply_ports_from_yaml.py",
     "l2"    : "apply_l2_from_yaml.py",
     "clos"  : "apply_clos_from_yaml.py",
-    "nopaxos": "apply_nopaxos_from_yaml.py",
+    "nopaxos_host": "apply_nopaxos_from_yaml.py",
+    "nopaxos_tofino": "apply_nopaxos_tofino_sequencer.py",
 }
 
 TOFINO_DIR = "infra/switch_tofino"
@@ -35,7 +36,7 @@ def sh(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--topo", default="configs/system-topo.yaml")
-    ap.add_argument("--mode", default="ports,l2", help="comma-separated: ports,l2,clos,nopaxos")
+    ap.add_argument("--mode", default="ports", help="comma-separated: ports,l2,clos,nopaxos_host,nopaxos_tofino")  # modes to run in order
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--remote-dir", default="/tmp/opticaldcn")
     ap.add_argument("--p4-prog", default="spineleaf")

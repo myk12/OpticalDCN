@@ -393,7 +393,7 @@ endpoints:
 #####################################################
 nopaxos:
   udp_port: 12000
-  groupaddr: 17.0.0.255
+  group_addr: 17.0.0.255
   sequencer:
     endpoint: fpga_2
     iface: p1

@@ -7,6 +7,9 @@
 [submodule "third_party/cornerstone"]
 	path = third_party/cornerstone
 	url = https://github.com/myk12/cornerstone.git
-[submodule "infra/fpga_nic/corundum"]
-	path = infra/fpga_nic/corundum
+[submodule "infra/nic_fpga/corundum"]
+	path = infra/nic_fpga/corundum
 	url = https://github.com/myk12/corundum.git
+[submodule "infra/nic_driver"]
+	path = infra/nic_driver
+	url = https://github.com/myk12/driver_nic.git

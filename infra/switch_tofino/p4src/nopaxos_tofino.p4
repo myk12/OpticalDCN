@@ -21,83 +21,77 @@
 //--------------------------------------------
 // Constants and Type Definitions
 //--------------------------------------------
+
 #define ETHERTYPE_IPV4 0x0800
 #define IP_PROTOCOL_UDP 17
 #define IP_PROTOCOL_TCP 6
 
-// -------------------------------
-// Modes
-// -------------------------------
-const bit<8> MODE_L2         = 0;
-const bit<8> MODE_L3         = 1;   // v1 Clos (no ECMP)
-const bit<8> MODE_NOPAXOS_V1 = 2;   // host-sequencer phase1 on top of MODE_L3
-
 // Ingress kinds
-const bit<8> K_UNKNOWN       = 0;   // unknown/unspecified
-const bit<8> K_LEAF_DOWNLINK = 1;   // servers/FPGAs -> leaf switch
-const bit<8> K_LEAF_UPLINK   = 2;   // leaf switch -> spine
-const bit<8> K_SPINE_PORT    = 3;   // spine ports -> leaf uplinks
+const bit<8>    K_UNKNOWN       = 0;   // unknown/unspecified
+const bit<8>    K_LEAF_DOWNLINK = 1;   // servers/FPGAs -> leaf switch
+const bit<8>    K_LEAF_UPLINK   = 2;   // leaf switch -> spine
+const bit<8>    K_SPINE_PORT    = 3;   // spine ports -> leaf uplinks
 
-/* Topology parameters */
-const bit<8> NUM_LEAFS = 4;
-const bit<8> NUM_SPINES = 2;
+// -------------------------------
+// Header and Metadata Definitions
+// -------------------------------
 
-/* ------------------------------
- * Header and Metadata Definitions
- * -------------------------------------------- */
+// -------------------------------
+// NOPaxos OUM Header
+// -------------------------------
+const bit<32>   NONFRAG_MAGIC = 32w0x18030520; //magic number for non-fragment NOPaxos packets
+const bit<8>    MAX_GROUPS = 1;
+const bit<16>   UDP_PORT_NOPAXOS = 16w12000; // UDP port for NOPaxos groupaddr traffic
+const bit<32>   GROUP_ADDR = 32w0xB10000FF; // 177.0.0.255 - reserved group address for NOPaxos Phase-1 packets, can be changed as needed
 
-header nopaxos_t {
-    bit<16> magic; // Magic number to identify NOPaxos packets
-    bit<16> epoch; // Epoch number for NOPaxos
-    bit<32> seq_num; // Sequence number for NOPaxos
-    bit<32> shard;
-    bit<16> flags;
+// A fixed sequencer ID written into the OUM header (session ID field).
+// This can also be made into configurable via a register or table if needed, but for simplicity we hardcode it here.
+const bit<64> SEQUENCER_ID = 64w0x0000000000000000; // example: 0 for now, can be changed to other values if needed
+
+// OUM header format
+// FRAG_MAGIC(32) | header_len(32) | orig_udp_src(16) |
+// session_id(64) | ngroups(32) |
+// group1_id(32)  | group1_seq(64) | ... (up to MAX_GROUPS groups)
+
+header nopaxos_oum_t {
+    bit<32> magic;          // Magic number to identify NOPaxos OUM packets
+    bit<32> header_len;     // Length of the OUM header
+    bit<16> orig_udp_src;   // Original UDP source port of the Phase-1 packet
+    bit<64> session_id;     // Session ID (we use this to store a fixed sequencer ID in v1)
+    bit<32> ngroups;        // Number of groups in this OUM packet (should be 1 for our simplified version)
+    bit<32> group0_id;      // Group ID (e.g., shard ID for NOPaxos)
+    bit<64> group0_seq;     // Sequence number for this group
 }
 
 struct header_t {
-    ethernet_h ethernet;
-    ipv4_h     ipv4;
-    udp_h      udp;
-    tcp_h      tcp;
-    nopaxos_t  nopaxos; // Optional NOPaxos header, only valid if magic number matches
+    ethernet_h      ethernet;
+    ipv4_h          ipv4;
+    udp_h           udp;
+    tcp_h           tcp;
+    nopaxos_oum_t   nopaxos_oum; // Optional NOPaxos OUM header, only valid if magic number matches
 }
 
 struct metadata_t {
-    pktgen_timer_header_t pktgen_timer_hdr;
-    bit<1> phase1_override; // Flag to indicate if packet should be treated as Phase 1 (for NOPaxos)
+    // -------------------------------
+    //  Routing metadata
+    // --------------------------------
+    pktgen_timer_header_t pktgen_timer_hdr; // Metadata for pktgen timer header, used for testing and timestamping
 
-    /* Mode selection */
-    bit<8> mode; // 0 = MODE_L2, 1 = MODE_CLOS_L3, 2 = MODE_NOPAXOS
-    bit<8> mode_key; // Key for mode selection table (can be extended for more complex mode selection)
-
-    /* Port classification metadata */
+    // We classify ingress ports into 3 categories: leaf downlink, leaf uplink, and spine port.
     bit<8> ingress_kind;    // K_UNKNOWN, K_LEAF_DOWNLINK, K_LEAF_UPLINK, K_SPINE_PORT
     bit<8> ingress_leaf;    // if ingress_kind is K_LEAF_DOWNLINK or K_LEAF_UPLINK, which leaf switch it is (1-4)
     bit<8> ingress_spine;   // if ingress_kind is K_SPINE_PORT, which spine switch it is (1-2)
 
-    /* Destination classification metadata */
+    // For SWITCH_MODE_L3 and SWITCH_MODE_NOPAXOS, we classify the destination based on dst MAC to determine:
     bit<8> dst_leaf;        // if destination is a leaf, which leaf switch it is (1-4)
     PortId_t dst_downlink_port; // if destination is a leaf, which downlink port to forward to
 
-    /* ECMP-like spine selection metadata */
-    bit<32> hash_seed;      // seed for hash calculation for spine selection
-    bit<8> selected_spine;  // selected spine switch based on hash
+    //bit<32> hash_seed;      // seed for hash calculation for spine selection
+    //bit<8> selected_spine;  // selected spine switch based on hash
 
-    /* NOPaxos metadata (for MODE_NOPAXOS) */
-    bit<8> is_nopaxos_req;
-    bit<32> nopaxos_shard;
-    bit<16> nopaxos_epoch;
-    bit<32> nopaxos_seq_num;
-    MulticastGroupId_t nopaxos_multicast_group; // Multicast group for NOPaxos replication
+    bit<1>  nopaxos_override;
+    bit<16> nopaxos_bitmap;  // bitmap of UDP src ports to notify
 }
-
-/* --------------------------------------------
- * Stateful objects (Registers, Meters, etc.)
- * -------------------------------------------- */
-const bit<32> NUM_SHARDS = 16; // Example number of shards for NOPaxos
-Register<bit<32>, bit<32>>(NUM_SHARDS) seq_num_reg; // For NOPaxos: stores the latest sequence number for each shard
-const bit<32> EPOCH_SLOTS = 1; // Number of slots for epoch number (can be extended for more complex epoch management)
-Register<bit<16>, bit<32>>(EPOCH_SLOTS) epoch_reg; // For NOPaxos: stores the current epoch number (can be extended for more complex epoch management)
 
 // --------------------------------------------
 // Ingress Parser
@@ -149,12 +143,22 @@ parser IngressParser(
     // UDP parsing
     state parse_udp {
         packet.extract(hdr.udp);
-        transition accept;
+        // Check destination port for potential NOPaxos Phase-1 traffic
+        transition select(hdr.udp.dst_port) {
+            UDP_PORT_NOPAXOS : parse_nopaxos_oum; // If it's destined to NOPaxos UDP port, parse OUM header
+            default: accept;
+        }
     }
 
     // TCP parsing
     state parse_tcp {
         packet.extract(hdr.tcp);
+        transition accept;
+    }
+
+    // NOPaxos OUM parsing
+    state parse_nopaxos_oum {
+        packet.extract(hdr.nopaxos_oum);
         transition accept;
     }
 }
@@ -178,25 +182,8 @@ control Ingress(
         ig_intr_tm_md.ucast_egress_port = port;
     }
 
-    action set_mode(bit<8> mode) {
-        ig_md.mode = mode;
-    }
-
     // -------------------------------
-    // L2 actions / table
-    // -------------------------------
-    action l2_forward(PortId_t port) { set_ucast_port(port); }
-    action l2_drop() { drop(); }
-
-    table t_l2_forward {
-        key = { hdr.ethernet.dst_addr: exact; }
-        actions = { l2_forward; l2_drop; }
-        size = 1024;
-        // default_action intentionally left unspecified; BFRT can clear/override
-    }
-
-    // -------------------------------
-    // Port role (required for MODE_L3 / MODE_NOPAXOS_V1)
+    // Port role (required for MODE_L3 / MODE_NOPAXOS)
     // -------------------------------
     action set_port_role(bit<8> kind, bit<8> leaf_id, bit<8> spine_id) {
         ig_md.ingress_kind = kind;
@@ -214,18 +201,8 @@ control Ingress(
     }
 
     // -------------------------------
-    // MODE selection
-    // -------------------------------
-    table t_mode {
-        key = { ig_md.mode_key: exact; }
-        actions = { set_mode; NoAction; }
-        size = 1;
-        default_action = set_mode(MODE_L2);
-    }
-
-    // -------------------------------
     // Destination classification (MAC -> dst_leaf + dst_downlink_port)
-    // Used by MODE_L3 and MODE_NOPAXOS_V1
+    // Used by MODE_L3 and MODE_NOPAXOS
     // -------------------------------
     action set_dst(bit<8> dst_leaf, PortId_t dst_downlink_port) {
         ig_md.dst_leaf = dst_leaf;
@@ -271,58 +248,85 @@ control Ingress(
         default_action = set_spine_egress_port((PortId_t)0);
     }
 
-    // -------------------------------
-    // NOPaxos v1 Phase-1 (host sequencer)
-    //
-    // Match groupaddr:udp_port traffic and:
-    //  - on client ingress (leaf downlinks): steer to sequencer port
-    //  - on sequencer ingress: multicast (PRE mgid/rid)
-    // -------------------------------
-    action nopaxos_p1_to_sequencer(PortId_t sequencer_port) {
-        set_ucast_port(sequencer_port);
-        ig_md.phase1_override = 1;
-    }
+    // --------------------------------
+    // NOPaxos Tofino Sequencer Dispatching
+    // --------------------------------
+    // Sequencer state: per-group 64-bit sequence number.
+    // Index type is bit<32> to match the group_id field in the OUM header.
+    const bit<32> MAX_GROUP_ID = 32w16; // support up to 16 groups for simplicity
+    Register<bit<64>, bit<32>>(size = MAX_GROUP_ID, initial_value = 0) nopaxos_oum_seq_reg;
+    RegisterAction<bit<64>, bit<32>, bit<64>>(nopaxos_oum_seq_reg) oum_seq_fetch_add = {
+        void apply(inout bit<64> value, out bit<64> rv) {
+            value = value + 1;
+            rv = value;
+        }
+    };
 
-    action nopaxos_p1_to_mcast(MulticastGroupId_t mgid, bit<16> rid) {
-        ig_intr_tm_md.mcast_grp_a = mgid;
+    // For Tofino sequencer, we directly rewrite the OUM header and UDP src port in the switch to achieve sequencing 
+    //  and replica notification without needing to send packets to an external host sequencer.
+    action nopaxos_tofino_sequencer(MulticastGroupId_t mcast_grp, bit<16> rid) {
+        // Sequence the packet by writing to the OUM header and modifying UDP src port.
+        // 1) Save original UDP src port into OUM header
+        hdr.nopaxos_oum.orig_udp_src = hdr.udp.src_port;
+
+        // 2) Write sequencer ID into session_id field
+        hdr.nopaxos_oum.session_id = SEQUENCER_ID;
+
+        // 3) Assign sequence number
+        bit<64> seq_num = oum_seq_fetch_add.execute(0); // atomically fetch and increment sequence number for the specified group
+        // change endianess if needed - Tofino registers are little-endian, but we want to keep the OUM header in network byte order (big-endian) for easier parsing by software components. So we convert the sequence number to big-endian before writing to the header.
+        hdr.nopaxos_oum.group0_seq = seq_num;
+
+        // 4) Modify UDP src port to encode the bitmap of replicas to notify
+        // In a real implementation, the bitmap can be determined based on the group ID and other factors. For simplicity, we take it as an action parameter here.
+        // Note: since the OUM header is only present in packets destined to the NOPaxos UDP port, we can safely reuse the UDP src port field to carry the bitmap for replica notification without affecting normal traffic.
+        hdr.udp.src_port = 16w1;
+        hdr.udp.checksum = 0;
+
+        // For simplicity we assume all sequenced packets belong to the same group and are multicast to the same group address.
+        ig_intr_tm_md.mcast_grp_a = mcast_grp;
         ig_intr_tm_md.rid = rid;
         ig_intr_tm_md.enable_mcast_cutthru = 1;
-        ig_md.phase1_override = 1;
+        ig_md.nopaxos_override = 1; // set override bit to skip normal forwarding for sequencer-originated packets
     }
 
-    table t_nopaxos_phase1 {
+    table t_nopaxos_tofino_sequencer {
         key = {
-            ig_intr_md.ingress_port: exact;
+            ig_intr_md.ingress_port: exact; // port where client request comes in
             hdr.ipv4.isValid() : exact;
-            hdr.udp.isValid()  : exact;
-            hdr.ipv4.dst_addr  : exact;
-            hdr.udp.dst_port   : exact;
+            hdr.udp.isValid() : exact;
+            hdr.ipv4.dst_addr: exact;
+            hdr.udp.dst_port: exact;
+            hdr.nopaxos_oum.isValid() : exact;
         }
         actions = {
-            nopaxos_p1_to_sequencer;
-            nopaxos_p1_to_mcast;
+            nopaxos_tofino_sequencer;
             NoAction;
         }
-        size = 64;
+        size = 16;
         default_action = NoAction();
+    }
+
+    action set_gid_to_bitmap(bit<16> bitmap) {
+        ig_md.nopaxos_bitmap = bitmap;
+    }
+
+    table t_gid_to_bitmap {
+        key = {
+            hdr.nopaxos_oum.group0_id: exact;
+        }
+        actions = {
+            set_gid_to_bitmap;
+        }
+        size = 16;
+        default_action = set_gid_to_bitmap(16w0); // default to empty bitmap for unknown groups
     }
 
     // -------------------------------
     // Apply
     // -------------------------------
     apply {
-        // ---- init metadata ----
-        ig_md.mode_key = 0;
-        ig_md.mode = MODE_L2;
-
-        ig_md.ingress_kind = K_UNKNOWN;
-        ig_md.ingress_leaf = 0;
-        ig_md.ingress_spine = 0;
-
-        ig_md.dst_leaf = 0;
-        ig_md.dst_downlink_port = (PortId_t)0;
-
-        ig_md.phase1_override = 0;
+        ig_md.nopaxos_override = 0; // default to no override
 
         // Must have ethernet for all modes
         if (!hdr.ethernet.isValid()) {
@@ -330,38 +334,26 @@ control Ingress(
             return;
         }
 
-        // Decide mode
-        t_mode.apply();
+        // -------------------------
+        // MODE_NOPAXOS: NOPaxos sequencer dispatching
+        // -------------------------
+        if (hdr.ipv4.isValid() && hdr.udp.isValid() && hdr.udp.dst_port == UDP_PORT_NOPAXOS) {
+            //t_gid_to_bitmap.apply(); // lookup group ID to get bitmap of replicas to notify
 
-        // -------------------------
-        // MODE_L2: only L2 table
-        // -------------------------
-        if (ig_md.mode == MODE_L2) {
-            t_l2_forward.apply();
-            return;
-        }
+            t_nopaxos_tofino_sequencer.apply();
 
-        // For MODE_L3 / MODE_NOPAXOS_V1 we need port role + dst classify
-        t_port_role.apply();
-        t_dst_mac_classify.apply();
-
-        // -------------------------
-        // MODE_NOPAXOS_V1: Phase-1 override first
-        // (only affects groupaddr:udp_port traffic)
-        // -------------------------
-        if (ig_md.mode == MODE_NOPAXOS_V1) {
-            if (hdr.ipv4.isValid() && hdr.udp.isValid()) {
-                t_nopaxos_phase1.apply();
-                if (ig_md.phase1_override == 1) {
-                    return;
-                }
+            if (ig_md.nopaxos_override == 1) {
+                // If the packet is marked for NOPaxos processing, we skip normal forwarding logic to avoid potential conflicts.
+                return;
             }
-            // fall-through to MODE_L3 forwarding for non-phase1 traffic
         }
 
         // -------------------------
         // MODE_L3: v1 Clos forwarding (no ECMP)
         // -------------------------
+        t_port_role.apply();
+
+        t_dst_mac_classify.apply();
 
         // Same leaf: directly downlink
         if (ig_md.dst_leaf != 0 && ig_md.dst_leaf == ig_md.ingress_leaf) {
@@ -415,16 +407,22 @@ control IngressDeparser(
         packet.emit(hdr.ipv4);
         packet.emit(hdr.udp);
         packet.emit(hdr.tcp);
+        packet.emit(hdr.nopaxos_oum);
     }
 }
 
 // -------------------------------------------
 // Egress Parser & Deparser
 // -------------------------------------------
+
+struct my_egress_metadata_t {
+    // Add any egress-specific metadata fields if needed
+}
+
 parser EgressParser(
     packet_in packet,
     out header_t hdr,
-    out metadata_t eg_md,
+    out my_egress_metadata_t eg_md,
     out egress_intrinsic_metadata_t eg_intr_md
 ) {
     TofinoEgressParser() tofino_parser;
@@ -440,7 +438,6 @@ parser EgressParser(
               ETHERTYPE_IPV4: parse_ipv4;
               default: accept;
         }
-
     }
 
     state parse_ipv4 {
@@ -461,6 +458,19 @@ parser EgressParser(
         packet.extract(hdr.tcp);
         transition accept;
     }
+
+    state parse_nopaxos_oum {
+        bit<32> magic = packet.lookahead<bit<32>>();
+        transition select(magic) {
+            NONFRAG_MAGIC: extract_nopaxos_oum; // If magic number matches, extract OUM header
+            default: accept; // Otherwise, treat as normal UDP traffic
+        }
+    }
+
+    state extract_nopaxos_oum {
+        packet.extract(hdr.nopaxos_oum);
+        transition accept;
+    }
 }
 
 // -------------------------------------------
@@ -468,22 +478,19 @@ parser EgressParser(
 // -------------------------------------------
 control Egress(
     inout header_t hdr,
-    inout metadata_t eg_md,
+    inout my_egress_metadata_t eg_md,
     in egress_intrinsic_metadata_t eg_intr_md,
     in egress_intrinsic_metadata_from_parser_t eg_intr_from_prsr,
     inout egress_intrinsic_metadata_for_deparser_t eg_intr_md_for_dprsr,
     inout egress_intrinsic_metadata_for_output_port_t eg_intr_md_for_oport
 ) {
-    apply {
-        // Currently no egress processing is defined
-        // This can be extended for egress timestamping or other functions
-    }
+    apply {}
 }
 
 control EgressDeparser(
     packet_out packet,
     inout header_t hdr,
-    in metadata_t eg_md,
+    in my_egress_metadata_t eg_md,
     in egress_intrinsic_metadata_for_deparser_t eg_intr_dprsr_md
 ) {
     apply {
@@ -491,6 +498,7 @@ control EgressDeparser(
         packet.emit(hdr.ipv4);
         packet.emit(hdr.udp);
         packet.emit(hdr.tcp);
+        packet.emit(hdr.nopaxos_oum);
     }
 }
 
