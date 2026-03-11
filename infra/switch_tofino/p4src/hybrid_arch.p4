@@ -1,0 +1,294 @@
+// =============================================================================
+//             Hybrid EPS-OCS P4 program for Tofino
+// =============================================================================
+
+// This P4 program implements a hybrid architecture that combines the features of
+// both EPS (Electrical Packet Switching) and OCS (Optical Circuit Switching).
+
+#include <core.p4>
+#if __TARGET_TOFINO__ == 2
+#include <t2na.p4>
+#else
+#include <tna.p4>
+#endif
+
+#include "include/headers.p4"
+#include "include/util.p4"
+
+// ---------------------------------------------------------------
+//  Constants and Type Definitions
+// ---------------------------------------------------------------
+#define ETHERTYPE_IPV4 0x0800
+#define IP_PROTOCOL_UDP 17
+#define IP_PROTOCOL_TCP 6
+
+// N = 8 slots
+const bit<48> OCS_SLOT_MASK = 48w7; // Mask to extract slot ID from port number
+const bit<48> OCS_SLOT_SHIFT = 13; // Number of bits to shift to get slot ID
+
+struct header_t {
+    ethernet_h ethernet;
+    ipv4_h ipv4;
+    tcp_h tcp;
+    udp_h udp;
+}
+
+struct metadata_t {
+    bit<1> is_ocs;  // 0 = EPS, 1 = OCS
+    // for OCS
+    bit<3> slot_id;
+    bit<1> selected_spine; // ECMP: 0 = spine 1, 1 = spine 2
+};
+
+// ---------------------------------------------------------------
+//              Ingress Logic
+// ---------------------------------------------------------------
+
+// Ingress Parser
+parser IngressParser(packet_in packet,
+                    out header_t hdr,
+                    out metadata_t ig_md,
+                    out ingress_intrinsic_metadata_t ig_intr_md)
+{
+    TofinoIngressParser() tofino_parser;
+
+    state start {
+        tofino_parser.apply(packet, ig_intr_md);
+        transition parse_ethernet;
+    }
+
+    state parse_ethernet {
+        packet.extract(hdr.ethernet);
+        transition select(hdr.ethernet.ether_type) {
+            ETHERTYPE_IPV4: parse_ipv4;
+            ETHERTYPE_ARP: accept;
+            default: accept;
+        }
+    }
+
+    state parse_ipv4 {
+        packet.extract(hdr.ipv4);
+        transition select(hdr.ipv4.protocol) {
+            IP_PROTOCOL_TCP: parse_tcp;
+            IP_PROTOCOL_UDP: parse_udp;
+            default: accept;
+        }
+    }
+
+    state parse_tcp {
+        packet.extract(hdr.tcp);
+        transition accept;
+    }
+
+    state parse_udp {
+        packet.extract(hdr.udp);
+        transition accept;
+    }
+}
+
+// Ingress Control
+control Ingress(
+    inout header_t hdr,
+    inout metadata_t ig_md,
+    in ingress_intrinsic_metadata_t ig_intr_md,
+    in ingress_intrinsic_metadata_from_parser_t ig_intr_prsr_md,
+    inout ingress_intrinsic_metadata_for_deparser_t ig_intr_dprsr_md,
+    inout ingress_intrinsic_metadata_for_tm_t ig_intr_tm_md)
+{
+    // -----------------------------------
+    // Helper Functions
+    // -----------------------------------
+    action drop() {
+        ig_intr_dprsr_md.drop_ctl = 0x1; // Mark packet for dropping
+    }
+
+    action set_ucast_port(PortId_t port) {
+        ig_intr_tm_md.ucast_egress_port = port;
+    }
+
+    // -----------------------------------
+    //  Table for port classification
+    // -----------------------------------
+    action set_port_kind_eps() { ig_md.is_ocs = 0;}
+    action set_port_kind_ocs() { ig_md.is_ocs = 1;}
+
+    table t_set_port_kind {
+        key = {
+            ig_intr_md.ingress_port: exact;
+        }
+        actions = {
+            set_port_kind_eps;
+            set_port_kind_ocs;
+            NoAction;
+        }
+        size = 256;
+        default_action = set_port_kind_eps();
+    }
+
+    // -----------------------------------
+    // Table for electrical path selection
+    // -----------------------------------
+    table t_eps_forward {
+        key = {
+            ig_intr_md.ingress_port: exact; 
+            hdr.ethernet.dst_addr: exact;
+            ig_md.selected_spine: exact;
+        }
+
+        actions = {
+            set_ucast_port;
+            drop;
+            NoAction;
+        }
+
+        size = 4096;
+        default_action = drop();
+    }
+
+    // -----------------------------------
+    // Table for optical path selection
+    // -----------------------------------
+
+    table t_ocs_schedule {
+        key = {
+            ig_intr_md.ingress_port: exact;
+            ig_md.slot_id: exact;
+        }
+        actions = {
+            set_ucast_port;
+            drop;
+            NoAction;
+        }
+        size = 2048;
+        default_action = drop();
+    }
+
+    // -----------------------------------
+    // Ingress Processing Logic
+    // -----------------------------------
+    apply {
+        // default 
+        ig_md.is_ocs = 0;
+        ig_md.slot_id = 0;
+
+        // classify port type (EPS vs OCS)
+        t_set_port_kind.apply();
+
+        if (ig_md.is_ocs == 1) {
+            // compute slot id from global timestamp
+            bit<48> ts = ig_intr_prsr_md.global_tstamp;
+            ig_md.slot_id = (bit<3>)((ts >> OCS_SLOT_SHIFT) & OCS_SLOT_MASK);
+
+            t_ocs_schedule.apply();
+
+            return;
+        }
+
+        // EPS
+        t_eps_forward.apply();
+    }
+}
+
+// ---------------------------------------------------------------
+//      Ingress Deparser
+// ---------------------------------------------------------------
+control IngressDeparser(packet_out packet,
+                        inout header_t hdr,
+                        in metadata_t ig_md,
+                        in ingress_intrinsic_metadata_for_deparser_t ig_intr_dprsr_md)
+{
+    apply {
+        // Emit headers
+        packet.emit(hdr.ethernet);
+        packet.emit(hdr.ipv4);
+        packet.emit(hdr.udp);
+        packet.emit(hdr.tcp);
+    }
+}
+
+// ---------------------------------------------------------------
+//              Egress Parser
+// ---------------------------------------------------------------
+parser EgressParser(packet_in packet,
+                    out header_t hdr,
+                    out metadata_t eg_md,
+                    out egress_intrinsic_metadata_t eg_intr_md)
+{
+    TofinoEgressParser() tofino_parser;
+
+    state start {
+        tofino_parser.apply(packet, eg_intr_md);
+        transition parse_ethernet;
+    }
+
+    state parse_ethernet {
+        packet.extract(hdr.ethernet);
+        transition select(hdr.ethernet.ether_type) {
+            ETHERTYPE_IPV4: parse_ipv4;
+            default: accept;
+        }
+    }
+
+    state parse_ipv4 {
+        packet.extract(hdr.ipv4);
+        transition select(hdr.ipv4.protocol) {
+            IP_PROTOCOL_UDP: parse_udp;
+            IP_PROTOCOL_TCP: parse_tcp;
+            default: accept;
+        }
+    }
+
+    state parse_udp {
+        packet.extract(hdr.udp);
+        transition accept;
+    }
+
+    state parse_tcp {
+        packet.extract(hdr.tcp);
+        transition accept;
+    }
+}
+
+// ---------------------------------------------------------------
+//     Egress Control
+// ---------------------------------------------------------------
+control Egress(
+    inout header_t hdr,
+    inout metadata_t eg_md,
+    in egress_intrinsic_metadata_t eg_intr_md,
+    in egress_intrinsic_metadata_from_parser_t eg_intr_from_prsr,
+    inout egress_intrinsic_metadata_for_deparser_t eg_intr_md_for_dprsr,
+    inout egress_intrinsic_metadata_for_output_port_t eg_intr_md_for_oport)
+{
+    apply {
+        // No specific egress processing for now
+    }
+}
+
+// ---------------------------------------------------------------
+//      Egress Deparser
+// ---------------------------------------------------------------
+control EgressDeparser(packet_out packet,
+                        inout header_t hdr,
+                        in metadata_t eg_md,
+                        in egress_intrinsic_metadata_for_deparser_t eg_intr_dprsr_md)
+{
+    apply {
+        packet.emit(hdr.ethernet);
+        packet.emit(hdr.ipv4);
+        packet.emit(hdr.udp);
+        packet.emit(hdr.tcp);
+    }
+}
+
+// ---------------------------------------------------------------
+//          Main Control Block
+// ---------------------------------------------------------------
+Pipeline(IngressParser(),
+        Ingress(),
+        IngressDeparser(),
+        EgressParser(),
+        Egress(),
+        EgressDeparser()) pipe;
+
+Switch(pipe) main;

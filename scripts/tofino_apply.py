@@ -11,7 +11,6 @@ from loguru import logger
 
 from utils.logging import setup_logger
 
-
 MODE_TO_REMOTE = {
     # keys are modes passed to --mode
     "ports" : "apply_ports_from_yaml.py",
@@ -19,10 +18,10 @@ MODE_TO_REMOTE = {
     "clos"  : "apply_clos_from_yaml.py",
     "nopaxos_host": "apply_nopaxos_from_yaml.py",
     "nopaxos_tofino": "apply_nopaxos_tofino_sequencer.py",
+    "hybrid" : "setup_hybrid_arch.py",
 }
 
 TOFINO_DIR = "infra/switch_tofino"
-
 
 def sh(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     cp = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

@@ -35,30 +35,27 @@ def normalize_speed(speed):
         return "BF_SPEED_10G"
     return s
 
-
 def normalize_fec(fec):
-    if fec is None:
-        return "BF_FEC_TYP_NONE"
     f = str(fec).upper()
     if f in ["RS", "RS-FEC", "RSFEC"]:
         return "BF_FEC_TYP_RS"
+    if f in ["FC", "FC-FEC", "FCFEC"]:
+        return "BF_FEC_TYP_FEC"
     if f in ["NONE", "NO", "OFF"]:
         return "BF_FEC_TYP_NONE"
-    return f
+    return "BF_FEC_TYP_NONE"  # default to NONE if unrecognized or not specified
 
 def port_add_enable(port_tbl, dev_port: int, speed: str, fec: str):
     """
     BFRT port table API varies across SDE releases.
     """
     logger.info(f"Adding/enabling port dev_port={dev_port} speed={speed} fec={fec}")
-    norm_fec = normalize_fec(fec)
-    norm_speed = normalize_speed(speed)
-
     try:
         port_tbl.add(
             DEV_PORT=dev_port,
-            SPEED=norm_speed,
-            FEC=norm_fec,
+            SPEED=speed,
+            FEC=fec,
+            AUTO_NEGOTIATION="PM_AN_FORCE_DISABLE",
             PORT_ENABLE=True,
         )
         return
@@ -68,15 +65,16 @@ def port_add_enable(port_tbl, dev_port: int, speed: str, fec: str):
     try:
         port_tbl.mod(
             DEV_PORT=dev_port,
-            SPEED=norm_speed,
-            FEC=norm_fec,
-            ENABLE=True,
+            SPEED=speed,
+            FEC=fec,
+            AUTO_NEGOTIATION="PM_AN_FORCE_DISABLE",
+            PORT_ENABLE=True,
         )
         return
     except Exception:
         pass
 
-    raise RuntimeError(f"Failed to add/enable port with dev_port={dev_port} speed={norm_speed} fec={norm_fec}. Check port table schema and adjust code as needed.")
+    raise RuntimeError(f"Failed to add/enable port with dev_port={dev_port} speed={speed} fec={fec}. Check port table schema and adjust code as needed.")
 
 def main():
     assert "bfrt" in globals(), "Run inside bfshell bfrt_python"
