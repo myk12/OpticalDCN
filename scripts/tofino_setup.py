@@ -34,7 +34,7 @@ def sh(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--topo", default="configs/system-topo.yaml")
+    ap.add_argument("--topo", default="configs/system-topo-v3.yaml")
     ap.add_argument("--mode", default="ports", help="comma-separated: ports,l2,clos,nopaxos_host,nopaxos_tofino")  # modes to run in order
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--remote-dir", default="/tmp/opticaldcn")

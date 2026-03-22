@@ -23,6 +23,7 @@
 #define IP_PROTOCOL_TCP 6
 
 #define MEAS_UDP_PORT 1997
+#define HOPVAR_UDP_PORT 1999
 
 // N = 8 slots
 const bit<48> OCS_SLOT_MASK = 48w7; // Mask to extract slot ID from port number
@@ -33,7 +34,8 @@ struct header_t {
     ipv4_h ipv4;
     tcp_h tcp;
     udp_h udp;
-    meas_hdr_h meas;
+    meas_hdr_h meas;        // optional measurement header
+    hopvar_hdr_h hopvar;    // optional hop variable header
 }
 
 struct metadata_t {
@@ -87,12 +89,19 @@ parser IngressParser(packet_in packet,
         packet.extract(hdr.udp);
         transition select(hdr.udp.dst_port) {
             MEAS_UDP_PORT: parse_meas;
+            HOPVAR_UDP_PORT: parse_hopvar;
             default: accept;
         }
     }
 
+
     state parse_meas {
         packet.extract(hdr.meas);
+        transition accept;
+    }
+
+    state parse_hopvar {
+        packet.extract(hdr.hopvar);
         transition accept;
     }
 }
@@ -220,6 +229,35 @@ control Ingress(
             t_meas_ingress_timestamp.apply();
         }
 
+        if (hdr.hopvar.isValid()) {
+            bit<48> ts = ig_intr_md.ingress_mac_tstamp;
+            bit<16> ts_count = hdr.hopvar.ts_count;
+
+            if (ts_count == 0) {
+                hdr.hopvar.ts0 = ts;
+            } else if (ts_count == 1) {
+                hdr.hopvar.ts1 = ts;
+            } else if (ts_count == 2) {
+                hdr.hopvar.ts2 = ts;
+            } else if (ts_count == 3) {
+                hdr.hopvar.ts3 = ts;
+            } else if (ts_count == 4) {
+                hdr.hopvar.ts4 = ts;
+            } else if (ts_count == 5) {
+                hdr.hopvar.ts5 = ts;
+            } else if (ts_count == 6) {
+                hdr.hopvar.ts6 = ts;
+            } else if (ts_count == 7) {
+                hdr.hopvar.ts7 = ts;
+            } else {
+                hdr.hopvar.flags = hdr.hopvar.flags | 16w0x0001; // overflow
+            }
+
+            hdr.hopvar.ts_count = ts_count + 1;
+
+            hdr.udp.checksum = 0;
+        }
+
         if (ig_md.is_ocs == 1) {
             // compute slot id from global timestamp
             bit<48> ts = ig_intr_prsr_md.global_tstamp;
@@ -250,6 +288,7 @@ control IngressDeparser(packet_out packet,
         packet.emit(hdr.udp);
         packet.emit(hdr.tcp);
         packet.emit(hdr.meas);
+        packet.emit(hdr.hopvar);
     }
 }
 
@@ -289,6 +328,7 @@ parser EgressParser(packet_in packet,
         packet.extract(hdr.udp);
         transition select(hdr.udp.dst_port) {
             MEAS_UDP_PORT: parse_meas;
+            HOPVAR_UDP_PORT: parse_hopvar;
             default: accept;
         }
     }
@@ -300,6 +340,11 @@ parser EgressParser(packet_in packet,
 
     state parse_meas {
         packet.extract(hdr.meas);
+        transition accept;
+    }
+
+    state parse_hopvar {
+        packet.extract(hdr.hopvar);
         transition accept;
     }
 }
@@ -367,6 +412,7 @@ control EgressDeparser(packet_out packet,
         packet.emit(hdr.udp);
         packet.emit(hdr.tcp);
         packet.emit(hdr.meas);
+        packet.emit(hdr.hopvar);
     }
 }
 

@@ -185,4 +185,31 @@ header meas_hdr_h {
     bit<32> error_bitmap;
 }
 
+// HOPVAR Headers
+const bit<32> HOPVAR_MAGIC = 0x484f5056;
+
+header hopvar_hdr_h {
+    bit<32> magic; // should be HOPVAR_MAGIC
+    bit<16> ver;
+    bit<16> hdr_len;
+
+    bit<64> req_id;
+    bit<16> flags;
+    bit<16> ts_count;
+
+    bit<48> ts0;
+    bit<48> ts1;
+    bit<48> ts2;
+    bit<48> ts3;
+    bit<48> ts4;
+    bit<48> ts5;
+    bit<48> ts6;
+    bit<48> ts7;
+    bit<48> ts8;
+    bit<48> ts9;
+
+    bit<32> valid_bitmap;
+    bit<32> reserved;
+} 
+
 #endif /* _HEADERS_ */
