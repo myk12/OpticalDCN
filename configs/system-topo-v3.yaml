@@ -115,22 +115,22 @@ switch:
     - id: leaf1_p1
       role: fabric
       port: "1/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine1_p1
     - id: leaf1_p2
       role: server
       port: "2/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_1, iface: p1}
     - id: leaf1_p3
       role: fabric
       port: "3/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine2_p1
     - id: leaf1_p4
       role: server
       port: "4/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_2, iface: p1}
 
     # ------------------------
@@ -139,22 +139,22 @@ switch:
     - id: leaf2_p1
       role: fabric
       port: "5/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine1_p2
     - id: leaf2_p2
       role: server
       port: "6/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_3, iface: p1}
     - id: leaf2_p3
       role: fabric
       port: "7/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine2_p2
     - id: leaf2_p4
       role: server
       port: "8/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_4, iface: p1}
 
     # ------------------------
@@ -163,22 +163,22 @@ switch:
     - id: leaf3_p1
       role: fabric
       port: "9/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine1_p3
     - id: leaf3_p2
       role: server
       port: "10/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_5, iface: p1}
     - id: leaf3_p3
       role: fabric
       port: "11/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine2_p3
     - id: leaf3_p4
       role: server
       port: "12/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_6, iface: p1}
     
     # ------------------------
@@ -187,22 +187,22 @@ switch:
     - id: leaf4_p1
       role: fabric
       port: "13/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine1_p4
     - id: leaf4_p2
       role: server
       port: "14/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_7, iface: p1}
     - id: leaf4_p3
       role: fabric
       port: "15/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: spine2_p4
     - id: leaf4_p4
       role: server
       port: "16/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_8, iface: p1}
 
     # -----------------------
@@ -211,25 +211,25 @@ switch:
     - id: spine1_p1
       role: fabric
       port: "17/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf1_p1
 
     - id: spine1_p2
       role: fabric
       port: "18/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf2_p1
 
     - id: spine1_p3
       role: fabric
       port: "19/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf3_p1
 
     - id: spine1_p4
       role: fabric
       port: "20/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf4_p1
 
     # -----------------------
@@ -238,25 +238,25 @@ switch:
     - id: spine2_p1
       role: fabric
       port: "21/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf1_p3
 
     - id: spine2_p2
       role: fabric
       port: "22/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf2_p3
 
     - id: spine2_p3
       role: fabric
       port: "23/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf3_p3
 
     - id: spine2_p4
       role: fabric
       port: "24/0"
-      spec: {speed: 100G, fec: None}
+      spec: {speed: 25G, fec: None}
       pair_with: leaf4_p3
     
     # -----------------------
@@ -265,42 +265,42 @@ switch:
     - id: opt_p1
       role: server
       port: "25/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_1, iface: p2}
     - id: opt_p2
       role: server
       port: "26/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_2, iface: p2}
     - id: opt_p3
       role: server
       port: "27/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_3, iface: p2}
     - id: opt_p4
       role: server
       port: "28/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_4, iface: p2}
     - id: opt_p5
       role: server
       port: "29/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_5, iface: p2}
     - id: opt_p6
       role: server
       port: "30/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_6, iface: p2}
     - id: opt_p7
       role: server
       port: "31/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_7, iface: p2}
     - id: opt_p8
       role: server
       port: "32/0"
-      spec: {speed: 100G, fec: RS}
+      spec: {speed: 25G, fec: None}
       connected_to: {endpoint: fpga_8, iface: p2}
 
 #####################################################################

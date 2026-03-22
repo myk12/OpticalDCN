@@ -155,4 +155,34 @@ struct empty_header_t {}
 
 struct empty_metadata_t {}
 
+
+// MEAS Headers
+const bit<32> MEAS_MAGIC = 0x4d454153;
+header meas_hdr_h {
+    bit<32> magic; // should be MEAS_MAGIC
+    bit<16> ver;
+    bit<16> hdr_len;
+
+    bit<64> req_id;
+
+    bit<32> valid_bitmap;
+    bit<16> clock_domain;
+    bit<16> flags;
+
+    bit<64> ts1;
+    bit<64> ts2;
+    bit<64> ts3;
+    bit<64> ts4;
+    bit<64> ts5;
+    bit<64> ts6;
+    bit<64> ts7;
+    bit<64> ts8;
+
+    bit<32> src_dev_id;
+    bit<32> sw_id;
+
+    bit<32> queue_meta;
+    bit<32> error_bitmap;
+}
+
 #endif /* _HEADERS_ */

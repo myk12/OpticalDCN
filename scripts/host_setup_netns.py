@@ -79,11 +79,14 @@ def configure_ip_up(ns: str, ifname: str, ip_cidr: str) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--topo", default="configs/system-spineleaf-topo.yaml")
+    ap.add_argument("--topo", default="configs/system-topo-v3.yaml")
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--no-validate", action="store_true")
     args = ap.parse_args()
 
+    # -------------------------------------------------
+    # 1. Load topology and validate
+    # -------------------------------------------------
     topo_path = Path(args.topo).resolve()
     run_id = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = Path(args.logdir) / run_id
@@ -97,6 +100,10 @@ def main():
 
     host = socket.gethostname()
     logger.info("hostname={}", host)
+    local_ep_ids = topo.hosts.get(host, [])
+    if not local_ep_ids:
+        logger.warning("No endpoints mapped to this host in topo: {}", host)
+        return
 
     # Select endpoints for this host
     local_ep_ids = topo.hosts.get(host, [])
@@ -108,7 +115,9 @@ def main():
     (out_dir / "inventory.json").write_text(topo_path.read_text())
 
     logger.info("Endpoints on this host: {}", local_ep_ids)
+    # -------------------------------------------------
     # Apply netns + iface config
+    # -------------------------------------------------
     for eid in local_ep_ids.endpoints:
         ep = topo.endpoints[eid]
         for nic in ep.network_interfaces:
@@ -121,8 +130,38 @@ def main():
             ensure_lo_up(nic.netns)
             move_iface_to_ns(nic.ifname, nic.netns)
             configure_ip_up(nic.netns, nic.ifname, nic.ip)
+    
+    # -------------------------------------------------
+    # Install static ARP entries for all switch-facing interfaces in each namespace
+    # -------------------------------------------------
+    # Build global ip->mac map for switch-facing interfaces only
+    ip2mac = {}
+    for ep in topo.endpoints.values():
+        for nic in ep.network_interfaces:
+            if nic.tofino_port is None:
+                continue
+            ip2mac[nic.ip.split("/")[0]] = nic.mac
+    logger.info("global switch-facing interfaces: {}", len(ip2mac))
 
-    logger.info("host bring-up done: {}", out_dir)
+    # Install into each local namespace
+    for eid in local_ep_ids.endpoints:
+        ep = topo.endpoints[eid]
+        for nic in ep.network_interfaces:
+            if nic.tofino_port is None:
+                continue
+            self_ip = nic.ip.split("/")[0]
+            logger.info("install ARP in ns={} dev={} (self_ip={})", nic.netns, nic.ifname, self_ip)
+            for ip, mac in ip2mac.items():
+                if ip == self_ip:
+                    continue
+                run_ns(
+                    nic.netns,
+                    ["ip", "neigh", "replace", ip, "lladdr", mac, "dev", nic.ifname, "nud", "permanent"],
+                    sudo=True,
+                    check=False,
+                )
+    logger.info("static ARP install done: {}", out_dir)
+
 
 if __name__ == "__main__":
     main()

@@ -33,7 +33,7 @@ def run_ns(ns: str, cmd: list[str], sudo: bool = False, check: bool = True):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--topo", default="configs/system-spineleaf-topo.yaml")
+    ap.add_argument("--topo", default="configs/system-topo-v3.yaml")
     ap.add_argument("--logdir", default="logs")
     args = ap.parse_args()
 

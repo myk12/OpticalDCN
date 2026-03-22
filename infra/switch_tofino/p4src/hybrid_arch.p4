@@ -22,6 +22,8 @@
 #define IP_PROTOCOL_UDP 17
 #define IP_PROTOCOL_TCP 6
 
+#define MEAS_UDP_PORT 1997
+
 // N = 8 slots
 const bit<48> OCS_SLOT_MASK = 48w7; // Mask to extract slot ID from port number
 const bit<48> OCS_SLOT_SHIFT = 13; // Number of bits to shift to get slot ID
@@ -31,6 +33,7 @@ struct header_t {
     ipv4_h ipv4;
     tcp_h tcp;
     udp_h udp;
+    meas_hdr_h meas;
 }
 
 struct metadata_t {
@@ -82,6 +85,14 @@ parser IngressParser(packet_in packet,
 
     state parse_udp {
         packet.extract(hdr.udp);
+        transition select(hdr.udp.dst_port) {
+            MEAS_UDP_PORT: parse_meas;
+            default: accept;
+        }
+    }
+
+    state parse_meas {
+        packet.extract(hdr.meas);
         transition accept;
     }
 }
@@ -164,15 +175,50 @@ control Ingress(
     }
 
     // -----------------------------------
+    // Table for measurement processing (optional)
+    // -----------------------------------
+    action meas_ingress_timestamp() {
+        // T4 = packet enters Tofino ingress pipeline
+        hdr.meas.ts4 = (bit<64>)ig_intr_md.ingress_mac_tstamp;
+        
+        // valid_bitmap |= MEAS_V_T4 (bit 3)
+        hdr.meas.valid_bitmap = hdr.meas.valid_bitmap | 32w0x00000008;
+
+        // flags |= MEAS_F_SWITCH_TOUCHED (bit 0)
+        hdr.meas.flags = hdr.meas.flags | 16w0x0001;
+
+        // simplify UDP checksum update by just setting it to 0 (since we're only adding a timestamp header, this is fine for testing)
+        hdr.udp.checksum = 0;
+    }
+
+    table t_meas_ingress_timestamp {
+        key = {
+            ig_intr_md.ingress_port: exact;
+            hdr.meas.isValid(): exact;
+        }
+        actions = {
+            meas_ingress_timestamp;
+            NoAction;
+        }
+        size = 256;
+        default_action = NoAction();
+    }
+
+    // -----------------------------------
     // Ingress Processing Logic
     // -----------------------------------
     apply {
         // default 
         ig_md.is_ocs = 0;
         ig_md.slot_id = 0;
+        ig_md.selected_spine = 0;
 
         // classify port type (EPS vs OCS)
         t_set_port_kind.apply();
+
+        if (hdr.meas.isValid()) {
+            t_meas_ingress_timestamp.apply();
+        }
 
         if (ig_md.is_ocs == 1) {
             // compute slot id from global timestamp
@@ -203,6 +249,7 @@ control IngressDeparser(packet_out packet,
         packet.emit(hdr.ipv4);
         packet.emit(hdr.udp);
         packet.emit(hdr.tcp);
+        packet.emit(hdr.meas);
     }
 }
 
@@ -240,11 +287,19 @@ parser EgressParser(packet_in packet,
 
     state parse_udp {
         packet.extract(hdr.udp);
-        transition accept;
+        transition select(hdr.udp.dst_port) {
+            MEAS_UDP_PORT: parse_meas;
+            default: accept;
+        }
     }
 
     state parse_tcp {
         packet.extract(hdr.tcp);
+        transition accept;
+    }
+
+    state parse_meas {
+        packet.extract(hdr.meas);
         transition accept;
     }
 }
@@ -260,8 +315,41 @@ control Egress(
     inout egress_intrinsic_metadata_for_deparser_t eg_intr_md_for_dprsr,
     inout egress_intrinsic_metadata_for_output_port_t eg_intr_md_for_oport)
 {
+    action drop() {
+        eg_intr_md_for_dprsr.drop_ctl = 0x1; // Mark packet for dropping
+    }
+
+    action meas_egress_timestamp() {
+        // T5 = packet enters Tofino egress pipeline
+        hdr.meas.ts5 = (bit<64>)eg_intr_from_prsr.global_tstamp;
+
+        // valid_bitmap |= MEAS_V_T5 (bit 4)
+        hdr.meas.valid_bitmap = hdr.meas.valid_bitmap | 32w0x00000010;
+
+        // flags |= MEAS_F_SWITCH_TOUCHED (bit 0)
+        hdr.meas.flags = hdr.meas.flags | 16w0x0001;
+
+        // simplify UDP checksum update by just setting it to 0 (since we're only adding a timestamp header, this is fine for testing)
+        hdr.udp.checksum = 0;
+    }
+    
+    table t_meas_egress_timestamp {
+        key = {
+            eg_intr_md.egress_port: exact;
+            hdr.meas.isValid(): exact;
+        }
+        actions = {
+            meas_egress_timestamp;
+            NoAction;
+        }
+        size = 256;
+        default_action = NoAction();
+    }
+
     apply {
-        // No specific egress processing for now
+        if (hdr.meas.isValid()) {
+            t_meas_egress_timestamp.apply();
+        }
     }
 }
 
@@ -278,6 +366,7 @@ control EgressDeparser(packet_out packet,
         packet.emit(hdr.ipv4);
         packet.emit(hdr.udp);
         packet.emit(hdr.tcp);
+        packet.emit(hdr.meas);
     }
 }
 

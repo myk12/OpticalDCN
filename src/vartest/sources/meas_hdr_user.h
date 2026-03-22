@@ -77,6 +77,11 @@ static inline uint32_t meas_get_error_bitmap(const struct meas_hdr_v1 *mh)
     return ntohl(mh->error_bitmap);
 }
 
+static inline uint16_t meas_get_clock_domain(const struct meas_hdr_v1 *mh)
+{
+    return ntohs(mh->clock_domain);
+}
+
 static inline uint64_t meas_get_req_id(const struct meas_hdr_v1 *mh)
 {
     return meas_be64_to_cpu(mh->req_id);
@@ -112,14 +117,14 @@ static inline uint64_t meas_get_t6(const struct meas_hdr_v1 *mh)
     return meas_be64_to_cpu(mh->T6);
 }
 
-static inline uint64_t meas_get_s1(const struct meas_hdr_v1 *mh)
+static inline uint64_t meas_get_t7(const struct meas_hdr_v1 *mh)
 {
-    return meas_be64_to_cpu(mh->S1);
+    return meas_be64_to_cpu(mh->T7);
 }
 
-static inline uint64_t meas_get_s2(const struct meas_hdr_v1 *mh)
+static inline uint64_t meas_get_t8(const struct meas_hdr_v1 *mh)
 {
-    return meas_be64_to_cpu(mh->S2);
+    return meas_be64_to_cpu(mh->T8);
 }
 
 static inline uint32_t meas_get_src_dev_id(const struct meas_hdr_v1 *mh)
