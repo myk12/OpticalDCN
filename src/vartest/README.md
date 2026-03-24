@@ -37,6 +37,8 @@ The timestamps currently used in the workflow are conceptually:
 - **T7**: RX kernel/driver timestamp
 - **T8**: user-space receive timestamp
 
+Currently, we have implemented T1, T2, T4, T5, T7, and T8. For the FPGA NIC timestamps (T3 and T6), we get them from the FPGA NIC's simulation environment, which provides detailed internal timing information. We are working on integrating these timestamps into the live testbed in the future.
+
 These timestamps are then aggregated into phase-level components such as:
 
 - **Kernel**
@@ -87,4 +89,76 @@ The project is organized into the following directories:
 - `build/`: Contains the build scripts and compiled binaries.
 - `results/`: Contains the results of the tests, including raw data and processed outputs.
 - `tools/`: Contains scripts for data analysis and visualization.
+
+
+
+## Run the Tests
+
+**Prerequisites:**
+
+1. Set up the testbed environment with the FPGA NICs and Tofino switches.
+2. Compile the necessary binaries for the MEAS test.
+
+
+### MEAS Test
+
+**Running the Test:**
+
+1. Start one terminal for the receiver and sender respectively.
+
+2. Start another terminal for the background traffic generator.
+
+
+### HOPVar Test
+
+**Receiver:**
+```bash
+Usage: ./hopvar_receiver --mode {packet|flow} --bind-ip IP --listen-port PORT --csv FILE [options]
+
+Common options:
+  --mode MODE            packet | flow
+  --bind-ip IP           local IPv4 address to bind
+  --listen-port PORT     local UDP port to listen on
+  --csv FILE             output CSV file
+  --packet-count N       stop after receiving N packets
+  --flow-count N         stop after completing N flows (flow mode)
+  --buf-size N           recv buffer size (default: 4096)
+  --flush-every N        fflush every N rows (default: 1000 packet / 100 flow)
+
+```
+
+```
+./hopvar_receiver --mode packet --bind-ip 0.0.0.0 --listen-port 1999 --csv hopvar_packet_incast0.csv --packet-count 1000000
+```
+
+**Sender:**
+```bash
+./hopvar_sender 
+Usage: ./hopvar_sender --mode {packet|flow} --dst-ip IP --dst-port PORT [options]
+
+Common options:
+  --mode MODE            packet | flow
+  --dst-ip IP            destination IPv4 address
+  --dst-port PORT        destination UDP port
+  --payload-len N        UDP payload length including headers (default: 1400)
+  --bind-ip IP           optional source bind IPv4 address
+  --csv FILE             output CSV file
+
+Packet mode options:
+  --count N              number of packets to send (default: 1)
+  --interval-us N        interval between packets in us (default: 1000000)
+  --start-req-id N       starting req_id (default: 1)
+
+Flow mode options:
+  --flow-size BYTES      application bytes per flow
+  --num-flows N          number of flows (default: 1)
+  --start-flow-id N      starting flow_id (default: 1)
+  --inter-flow-gap-us N  gap between flows in us (default: 0)
+
+```
+
+```bash
+./hopvar_sender --mode packet --dst-ip 177.0.1.1 --dst-port 1999 --payload-len 1400 --count 1000000 --interval-us 1
+```
+
 

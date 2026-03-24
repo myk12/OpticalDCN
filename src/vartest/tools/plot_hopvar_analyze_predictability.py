@@ -3,17 +3,95 @@ import argparse
 import re
 from pathlib import Path
 from typing import Optional
+from cycler import cycler
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from loguru import logger
+
+MY_COLORS = ['#0C4C8A', '#CE5C00', '#1D8E3E', '#75507B', '#555753']
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+class AcademicStyleManager:
+    def __init__(self):
+        # Nordic Sci-Fi 高级感色卡
+        self.colors =['#0C4C8A', '#CE5C00', '#1D8E3E', '#75507B', '#555753'] 
+        self.markers = ['o', 's', '^', 'D']
+        #self.font_family = font_family
+        self._apply_global_settings()
+
+    def _apply_global_settings(self):
+        """初始化全局参数，强制所有图表拥有统一的黑色加粗全封闭边框"""
+        plt.rcParams.update({
+            #"font.family": self.font_family,
+            #"font.serif": ["Times New Roman", "DejaVu Serif"],
+            # --- 核心：全边框控制 ---
+            "axes.linewidth": 1.2,          # 稍微加粗，让边框更有质感
+            "axes.edgecolor": "black",      # 确保是纯黑
+            "axes.spines.top": True,        # 强制保留顶边
+            "axes.spines.right": True,      # 强制保留右边
+            
+            "patch.linewidth": 0.8,         # 柱状图本身的边框
+            "xtick.direction": "in",        # 刻度向内是全边框标配
+            "ytick.direction": "in",
+            "xtick.top": True,              # 顶部也显示刻度（可选，更硬核）
+            "ytick.right": True,            # 右侧也显示刻度
+            
+            "grid.linestyle": "--",
+            "grid.alpha": 0.3,
+            "figure.dpi": 300,
+            "savefig.bbox": "tight",
+            "legend.frameon": True,         # 这种风格通常配有边框的图例
+            "legend.edgecolor": "black",
+        })
+
+    def get_palette(self, levels):
+        return dict(zip(sorted(levels), self.colors[:len(levels)]))
+
+    def get_markers(self, levels):
+        return dict(zip(sorted(levels), self.markers[:len(levels)]))
+
+    def finalize_axes(self, ax, title=None, xlabel=None, ylabel=None, is_log=False):
+        """处理标签和坐标轴，不再执行 despine"""
+        if title: ax.set_title(title, fontweight='bold', pad=12)
+        if xlabel: ax.set_xlabel(xlabel)
+        if ylabel: ax.set_ylabel(ylabel)
+        
+        # 确保四周的线条都是黑色的（防止被 Seaborn 默认主题覆盖）
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_edgecolor('black')
+        
+        if is_log:
+            ax.set_yscale('log')
+            from matplotlib.ticker import LogFormatterMathtext
+            ax.yaxis.set_major_formatter(LogFormatterMathtext())
+            
+        return ax
+
+# Example Usage:
+#   python plot_hopvar_analyze_predictability.py \
+#     --inputs results/hopvar/hopvar_pktsize_128B.csv results/hopvar/hopvar_pktsize_512B.csv results/hopvar/hopvar_pktsize_1400B.csv \
+#     --outdir results/hopvar/predictability_analysis \
+#     --plot-payloads 128 512 1400 \
+#     --table-payloads 128 512 1400
 
 TS_COLS = [f"ts{i}" for i in range(10)]
 
+def apply_my_style():
+    plt.rcParams['axes.prop_cycle'] = (
+        cycler(color=MY_COLORS)
+    )
 
 def fit_line(x: np.ndarray, y: np.ndarray):
+    logger.debug(f"Fitting line to data: x={x}, y={y}")
+    # simple linear regression using numpy polyfit, which is sufficient for our needs and avoids extra dependencies
     coeff = np.polyfit(x, y, 1)
     a, b = coeff[0], coeff[1]
     y_hat = a * x + b
@@ -36,8 +114,8 @@ def parse_payload_size(path: Path) -> int:
         )
     return int(m.group(1))
 
-
 def load_one_packet_csv(csv_path: Path, payload_size: Optional[int] = None) -> pd.DataFrame:
+    logger.info(f"Loading CSV file: {csv_path}")
     df = pd.read_csv(csv_path)
 
     required = ["req_id"] + TS_COLS
@@ -48,49 +126,47 @@ def load_one_packet_csv(csv_path: Path, payload_size: Optional[int] = None) -> p
     for c in TS_COLS:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    if payload_size is None:
+    # check if payload size matched the filename
+    if payload_size is not None:
         if "payload_len" in df.columns:
-            uniq = sorted(pd.to_numeric(df["payload_len"], errors="coerce").dropna().unique())
-            if len(uniq) == 1:
-                payload_size = int(uniq[0])
-            else:
-                payload_size = parse_payload_size(csv_path)
+            unique_payloads = df["payload_len"].dropna().unique()
+            if len(unique_payloads) > 1:
+                raise ValueError(f"Multiple payload sizes found in {csv_path}: {unique_payloads}")
+            elif len(unique_payloads) == 1 and unique_payloads[0] != payload_size:
+                raise ValueError(
+                    f"Payload size in {csv_path} ({unique_payloads[0]}) does not match expected {payload_size}"
+                )
         else:
-            payload_size = parse_payload_size(csv_path)
+            logger.warning(f"No 'payload_len' column in {csv_path}, using filename payload size {payload_size}")
 
     df["Payload Size (bytes)"] = payload_size
     return df
 
-
 def build_long_latency_df(df: pd.DataFrame) -> pd.DataFrame:
-    rows = []
+    logger.info("Transforming raw packet timestamp data into long format with latency calculations...")
+    # data cleaning: only keep rows where ts0 is valid, since it's the baseline timestamp for latency calculation
+    df = df[df["ts0"].notna() & (df["ts0"] != 0)].copy()
 
-    for _, row in df.iterrows():
-        ts0 = row["ts0"]
-        if pd.isna(ts0) or ts0 == 0:
-            continue
+    # Reshape from wide to long format for easier analysis and plotting
+    long_df = df.melt(
+        id_vars=["req_id", "Payload Size (bytes)", "ts0"],
+        value_vars=[f"ts{i}" for i in range(1, 10)],
+        var_name="Hop Count",
+        value_name="tsk"
+    )
 
-        for hop in range(1, 10):
-            tsk = row[f"ts{hop}"]
-            if pd.isna(tsk) or tsk == 0:
-                continue
+    # Clean the data: only keep rows where tsk is valid, since we need it to calculate latency
+    long_df = long_df[long_df["tsk"].notna() & (long_df["tsk"] != 0)].copy()
+    long_df["Latency (ns)"] = (long_df["tsk"] - long_df["ts0"]).astype(int)
+    
+    # Clean the Hop Count column: 'ts1' -> 1
+    long_df["Hop Count"] = long_df["Hop Count"].str.extract('(\d+)').astype(int)
 
-            latency_ns = float(tsk - ts0)
-            rows.append({
-                "req_id": int(row["req_id"]),
-                "Payload Size (bytes)": int(row["Payload Size (bytes)"]),
-                "Hop Count": hop,
-                "Latency (ns)": latency_ns,
-            })
-
-    long_df = pd.DataFrame(rows)
-    if long_df.empty:
-        raise ValueError("No valid hop latency samples could be extracted from the input CSVs")
-
-    return long_df
+    return long_df[["req_id", "Payload Size (bytes)", "Hop Count", "Latency (ns)"]]
 
 
 def build_summary_df(long_df: pd.DataFrame) -> pd.DataFrame:
+    logger.info("Building summary DataFrame with latency statistics...")
     summary_rows = []
 
     grouped = long_df.groupby(["Payload Size (bytes)", "Hop Count"])
@@ -121,6 +197,7 @@ def build_summary_df(long_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_fit_table(long_df: pd.DataFrame) -> pd.DataFrame:
+    logger.info("Fitting linear models to analyze predictability...")
     fit_rows = []
 
     payloads = sorted(long_df["Payload Size (bytes)"].unique())
@@ -146,39 +223,48 @@ def build_fit_table(long_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_mean_latency_vs_hop(summary_df: pd.DataFrame, out_path: Path):
-    fig, ax = plt.subplots(figsize=(6.2, 4.0))
-
+    logger.info("Plotting mean latency vs. hop count...")
+    fig, ax = plt.subplots(figsize=(4, 3))
+    
     sns.lineplot(
         data=summary_df,
         x="Hop Count",
         y="Latency Mean (ns)",
         hue="Payload Size (bytes)",
-        marker="o",
-        linewidth=2.2,
-        markersize=6,
-        ax=ax,
+        style="Payload Size (bytes)", 
+        markers=True,
+        dashes=False,
+        palette=MY_COLORS,
+        linewidth=1.8,
+        markersize=8,
+        ax=ax
     )
-
-    ax.set_xlabel("Hop Count")
-    ax.set_ylabel("Mean Latency (ns)")
-    ax.set_title("Mean packet latency vs. hop count")
-    ax.grid(True, alpha=0.25)
-    ax.legend(title="Payload Size", ncol=2, frameon=True)
+    
+    ax.set_xlabel("Hop Count (Number of Switches)", fontsize=11)
+    ax.set_ylabel("Mean Latency (ns)", fontsize=11)
+    
+    ax.set_xticks(range(1, 8))
+    
+    ax.legend(title="Payload (Bytes)", frameon=True, loc='upper left')
 
     for spine in ax.spines.values():
         spine.set_linewidth(1.4)
-    ax.tick_params(axis="both", which="both", width=1.2)
+    ax.tick_params(axis="both", which="both")
+
+    style_manager = AcademicStyleManager()
+    style_manager.finalize_axes(ax)
 
     plt.tight_layout()
-    plt.savefig(out_path, dpi=220, bbox_inches="tight")
+    plt.savefig(out_path, bbox_inches="tight")
     plt.close()
 
 
 def plot_fit_overlay(long_df: pd.DataFrame, out_path: Path):
+    logger.info("Plotting latency vs. hop count with linear fit overlay...")
     payloads = sorted(long_df["Payload Size (bytes)"].unique())
     palette = sns.color_palette("deep", len(payloads))
 
-    fig, ax = plt.subplots(figsize=(6.2, 4.0))
+    fig, ax = plt.subplots(figsize=(4, 3))
 
     for color, payload in zip(palette, payloads):
         sub = long_df[long_df["Payload Size (bytes)"] == payload].copy()
@@ -217,12 +303,14 @@ def plot_fit_overlay(long_df: pd.DataFrame, out_path: Path):
     ax.set_xlabel("Hop Count")
     ax.set_ylabel("Latency (ns)")
     ax.set_title("Linear fit of packet latency vs. hop count")
-    ax.grid(True, alpha=0.25)
+    ax.grid(True)
     ax.legend(frameon=True, fontsize=9, ncol=2)
 
     for spine in ax.spines.values():
         spine.set_linewidth(1.4)
     ax.tick_params(axis="both", which="both", width=1.2)
+
+    style_manager.finalize_axes(ax)
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=220, bbox_inches="tight")
@@ -260,24 +348,14 @@ def main():
         default=None,
         help="payload sizes to KEEP in tables only; default is all payloads",
     )
-    parser.add_argument("--outdir", default="hop_packet_predictability")
+    parser.add_argument("--outdir", default="plots/hopvar", help="output directory for tables and plots")
     args = parser.parse_args()
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    sns.set_theme(style="whitegrid", context="paper")
-    plt.rcParams.update({
-        "font.size": 12,
-        "axes.titlesize": 13,
-        "axes.labelsize": 13,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "legend.fontsize": 10,
-        "legend.title_fontsize": 10,
-        "axes.linewidth": 1.4,
-    })
-
+    # Load and process all input CSV files
+    logger.info(f"Loading data from {len(args.inputs)} input CSV files...")
     raw_dfs = []
     for path_str in args.inputs:
         path = Path(path_str)
@@ -307,24 +385,22 @@ def main():
 
     print_summary(summary_df_plot, fit_df_table)
 
-    raw_df.to_csv(outdir / "processed_raw_packets_all.csv", index=False)
-    long_df_all.to_csv(outdir / "packet_latency_long_all.csv", index=False)
-    long_df_plot.to_csv(outdir / "packet_latency_long_plot.csv", index=False)
-    long_df_table.to_csv(outdir / "packet_latency_long_table.csv", index=False)
-    summary_df_plot.to_csv(outdir / "packet_latency_summary_plot.csv", index=False)
+    #raw_df.to_csv(outdir / "processed_raw_packets_all.csv", index=False)
+    #long_df_all.to_csv(outdir / "packet_latency_long_all.csv", index=False)
+    #long_df_plot.to_csv(outdir / "packet_latency_long_plot.csv", index=False)
+    #long_df_table.to_csv(outdir / "packet_latency_long_table.csv", index=False)
+    #summary_df_plot.to_csv(outdir / "packet_latency_summary_plot.csv", index=False)
     fit_df_table.to_csv(outdir / "predictability_stability_table.csv", index=False)
 
-    plot_mean_latency_vs_hop(summary_df_plot, outdir / "mean_latency_vs_hop.png")
-    plot_fit_overlay(long_df_plot, outdir / "latency_linear_fit_overlay.png")
+    plot_mean_latency_vs_hop(summary_df_plot, outdir / "mean_latency_vs_hop.pdf")
+    #plot_fit_overlay(long_df_plot, outdir / "latency_linear_fit_overlay.pdf")
 
-    print(f"wrote {outdir / 'processed_raw_packets_all.csv'}")
-    print(f"wrote {outdir / 'packet_latency_long_all.csv'}")
-    print(f"wrote {outdir / 'packet_latency_long_plot.csv'}")
-    print(f"wrote {outdir / 'packet_latency_long_table.csv'}")
-    print(f"wrote {outdir / 'packet_latency_summary_plot.csv'}")
-    print(f"wrote {outdir / 'predictability_stability_table.csv'}")
-    print(f"wrote {outdir / 'mean_latency_vs_hop.png'}")
-    print(f"wrote {outdir / 'latency_linear_fit_overlay.png'}")
+    #logger.info(f"wrote {outdir / 'packet_latency_long_plot.csv'}")
+    #logger.info(f"wrote {outdir / 'packet_latency_long_table.csv'}")
+    #logger.info(f"wrote {outdir / 'packet_latency_summary_plot.csv'}")
+    #logger.info(f"wrote {outdir / 'mean_latency_vs_hop.pdf'}")
+    #logger.info(f"wrote {outdir / 'latency_linear_fit_overlay.pdf'}")
+    logger.info(f"wrote {outdir / 'predictability_stability_table.csv'}")
 
 
 if __name__ == "__main__":

@@ -145,7 +145,6 @@ int main(int argc, char **argv)
     struct sockaddr_in src_addr, dst_addr;
     const char *src_ip;
     const char *dst_ip;
-    const char *payload;
     int payload_size;
     const char *sender_csv;
     const char *sender_tx_ts_csv;
@@ -167,8 +166,7 @@ int main(int argc, char **argv)
 
     src_ip = cfg_get_string(&cfg, "probe", "src_ip", NULL);
     dst_ip = cfg_get_string(&cfg, "probe", "dst_ip", NULL);
-    payload = cfg_get_string(&cfg, "probe", "app_payload", "hello");
-    payload_size = cfg_get_int(&cfg, "probe", "app_payload_size", 1024);
+    payload_size = cfg_get_int(&cfg, "probe", "payload_size", 1024);
     sender_csv = cfg_get_string(&cfg, "probe", "sender_csv", "sender.csv");
     sender_tx_ts_csv = cfg_get_string(&cfg, "probe", "sender_tx_ts_csv", "sender_tx_ts.csv");
     dst_port = cfg_get_int(&cfg, "probe", "dst_port", 9000);
@@ -286,19 +284,16 @@ int main(int argc, char **argv)
         struct meas_hdr_v1 *mh = (struct meas_hdr_v1 *)buf;
         uint64_t t1 = realtime_ns();
         uint64_t req_id = req_id_start + (unsigned long long)i;
-        size_t payload_len = sizeof(*mh) + (size_t)payload_size;
-        size_t payload_src_len = strlen(payload);
-        size_t copy_len = payload_src_len < (size_t)payload_size ? payload_src_len : (size_t)payload_size;
 
-        if (payload_len > sizeof(buf))
+        if (payload_size > 2048)
         {
             fprintf(stderr, "payload too large\n");
             break;
         }
 
-        memset(buf, 0, payload_len);
+        memset(buf, 0, payload_size);
         meas_hdr_v1_init(mh, req_id, MEAS_CLK_HOST_MONO, t1);
-        memcpy(buf + sizeof(*mh), payload, copy_len);
+        memcpy(buf + sizeof(*mh), "X", payload_size - sizeof(*mh)); // dummy payload
 
         // Get PHC timestamp immediately before sending
         if (clock_gettime(FD_TO_CLOCKID(phc_fd), &phc_user_tx) != 0) {
@@ -307,7 +302,7 @@ int main(int argc, char **argv)
         }
 
         // Send the packet
-        if (sendto(fd, buf, payload_len, 0,
+        if (sendto(fd, buf, payload_size, 0,
                    (struct sockaddr *)&dst_addr, sizeof(dst_addr)) < 0)
         {
             perror("sendto");
@@ -319,13 +314,13 @@ int main(int argc, char **argv)
         txrecs[i].has_tx_hw_ts = 0;
 
         // Output CSV with user-space timestamp (T1) for reference, even though the main focus is on hardware timestamps
-        fprintf(csv, "%llu,%llu,%llu,%s,%d,%zu\n",
+        fprintf(csv, "%llu,%llu,%llu,%s,%d,%u\n",
                 (unsigned long long)req_id,
                 (unsigned long long)timespec_to_ns(&phc_user_tx),
                 (unsigned long long)t1,
                 dst_ip,
                 dst_port,
-                payload_len);
+                payload_size);
 
         if (i % 100000 == 0)
         {

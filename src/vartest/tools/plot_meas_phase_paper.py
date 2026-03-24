@@ -14,12 +14,73 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+#MY_COLORS = ['#0C4C8A', '#CE5C00', '#1D8E3E', '#75507B', '#555753']
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+class AcademicStyleManager:
+    def __init__(self):
+        # Nordic Sci-Fi 高级感色卡
+        self.colors =   ['#0C4C8A', '#CE5C00', '#1D8E3E', '#75507B', '#555753']  
+        self.markers = ['o', 's', '^', 'D']
+        #self.font_family = font_family
+        self._apply_global_settings()
+
+    def _apply_global_settings(self):
+        """初始化全局参数，强制所有图表拥有统一的黑色加粗全封闭边框"""
+        plt.rcParams.update({
+            #"font.family": self.font_family,
+            #"font.serif": ["Times New Roman", "DejaVu Serif"],
+            # --- 核心：全边框控制 ---
+            "axes.linewidth": 1.2,          # 稍微加粗，让边框更有质感
+            "axes.edgecolor": "black",      # 确保是纯黑
+            "axes.spines.top": True,        # 强制保留顶边
+            "axes.spines.right": True,      # 强制保留右边
+            
+            "patch.linewidth": 0.8,         # 柱状图本身的边框
+            "xtick.direction": "in",        # 刻度向内是全边框标配
+            "ytick.direction": "in",
+            "xtick.top": True,              # 顶部也显示刻度（可选，更硬核）
+            "ytick.right": True,            # 右侧也显示刻度
+            
+            "grid.linestyle": "--",
+            "grid.alpha": 0.3,
+            "figure.dpi": 300,
+            "savefig.bbox": "tight",
+            "legend.frameon": True,         # 这种风格通常配有边框的图例
+            "legend.edgecolor": "black",
+        })
+
+    def get_palette(self, levels):
+        return dict(zip(sorted(levels), self.colors[:len(levels)]))
+
+    def get_markers(self, levels):
+        return dict(zip(sorted(levels), self.markers[:len(levels)]))
+
+    def finalize_axes(self, ax, title=None, xlabel=None, ylabel=None, is_log=False):
+        """处理标签和坐标轴，不再执行 despine"""
+        if title: ax.set_title(title, fontweight='bold', pad=12)
+        if xlabel: ax.set_xlabel(xlabel)
+        if ylabel: ax.set_ylabel(ylabel)
+        
+        # 确保四周的线条都是黑色的（防止被 Seaborn 默认主题覆盖）
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_edgecolor('black')
+        
+        if is_log:
+            ax.set_yscale('log')
+            from matplotlib.ticker import LogFormatterMathtext
+            ax.yaxis.set_major_formatter(LogFormatterMathtext())
+            
+        return ax
 
 def ecdf(values: np.ndarray):
     x = np.sort(values)
     y = np.arange(1, len(x) + 1) / len(x)
     return x, y
-
 
 def parse_incast_from_name(path: Path) -> int:
     m = re.search(r"incast_(\d+)", path.name)
@@ -92,7 +153,7 @@ def plot_breakdown_bar(summary_df: pd.DataFrame, stats_by_incast: dict, out_path
     label_map = {}
     for incast in incast_values:
         loss_rate_pct = stats_by_incast[incast]["loss_rate"] * 100.0
-        label_map[incast] = f"{incast} / {loss_rate_pct:.2f}%"
+        label_map[incast] = f"{incast} ({loss_rate_pct:.2f}%)"
 
     plot_df["legend_label"] = plot_df["incast"].map(label_map)
     hue_order = [label_map[i] for i in incast_values]
@@ -100,6 +161,8 @@ def plot_breakdown_bar(summary_df: pd.DataFrame, stats_by_incast: dict, out_path
     # convert ns to us for better readability
     plot_df["p50_ns"] = plot_df["p50_ns"] / 1000.0
     plot_df["p99_ns"] = plot_df["p99_ns"] / 1000.0
+
+    style_manager = AcademicStyleManager()
 
     plt.figure(figsize=(4, 3))
     ax = sns.barplot(
@@ -109,20 +172,23 @@ def plot_breakdown_bar(summary_df: pd.DataFrame, stats_by_incast: dict, out_path
         hue="legend_label",
         order=phase_order,
         hue_order=hue_order,
-        errorbar=None
+        #errorbar=None,
+        #palette=MY_COLORS[:len(incast_values)],
     )
     ax.set_yscale("log")
     ax.set_ylabel("99th percentile latency (us)")
     ax.set_xlabel("")
-    ax.grid(True, axis="y")
-    ax.legend(title="Incast / Loss Rate", ncol=2, frameon=True)
+    ax.grid(True, which="both", alpha=0.25)
+    ax.legend(title="# Incast Flows (Loss Rate)", ncol=2, frameon=True)
 
     for spine in ax.spines.values():
         spine.set_linewidth(1.4)
-    ax.tick_params(axis="both", which="both", width=1.2)
+    ax.tick_params(axis="both", which="both")
+
+    style_manager.finalize_axes(ax, is_log=True)
 
     plt.tight_layout()
-    plt.savefig(out_path, dpi=220, bbox_inches="tight")
+    plt.savefig(out_path, bbox_inches="tight")
     plt.close()
 
 
@@ -163,8 +229,8 @@ def plot_phase_ccdf_2x2(
         ax.plot(x1, 1.0 - y1, label=f"Incast={high_incast}", color=palette[1], linewidth=2)
 
         ax.set_yscale("log")
+        ax.grid(True, which="both", alpha=0.25)
         ax.set_title(phase, fontsize=10)
-        ax.grid(False)
 
         for spine in ax.spines.values():
             spine.set_linewidth(1.4)
@@ -212,7 +278,7 @@ def main():
         required=True,
         help="input CSV files, e.g. results/vartest_incast_0.csv results/vartest_incast_1.csv ..."
     )
-    parser.add_argument("--outdir", default="paper_plots", help="output directory")
+    parser.add_argument("--outdir", default="plots/meas", help="output directory")
     parser.add_argument("--low-incast", type=int, default=0, help="low incast used in Figure 2")
     parser.add_argument("--high-incast", type=int, default=4, help="high incast used in Figure 2")
     args = parser.parse_args()
@@ -220,33 +286,21 @@ def main():
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    sns.set_theme(style="whitegrid", context="paper")
-    plt.rcParams.update({
-        "font.size": 12,
-        "axes.titlesize": 13,
-        "axes.labelsize": 13,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "legend.fontsize": 9,
-        "legend.title_fontsize": 9,
-        "axes.linewidth": 1.4,
-    })
-
     dfs, stats_by_incast, summary_df = build_all_data(args.inputs)
 
-    save_table(summary_df, outdir / "phase_breakdown_table.csv")
+    save_table(summary_df, outdir / "latency_breakdown_table.csv")
     print_table(summary_df)
     print_loss_summary(stats_by_incast)
 
     plot_breakdown_bar(
         summary_df,
         stats_by_incast,
-        outdir / "figure1_phase_breakdown_bar.pdf"
+        outdir / "latency_breakdown_bar.pdf"
     )
 
     plot_phase_ccdf_2x2(
         dfs,
-        outdir / "figure2_phase_ccdf_2x2.pdf",
+        outdir / "latency_ccdf_2x2.pdf",
         low_incast=args.low_incast,
         high_incast=args.high_incast
     )
