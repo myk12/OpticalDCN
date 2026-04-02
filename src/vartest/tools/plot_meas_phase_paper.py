@@ -22,7 +22,7 @@ import numpy as np
 
 class AcademicStyleManager:
     def __init__(self):
-        # Nordic Sci-Fi 高级感色卡
+        # Nordic Sci-Fi palette, good for up to 5 categories
         self.colors =   ['#0C4C8A', '#CE5C00', '#1D8E3E', '#75507B', '#555753']  
         self.markers = ['o', 's', '^', 'D']
         #self.font_family = font_family
@@ -51,6 +51,14 @@ class AcademicStyleManager:
             "savefig.bbox": "tight",
             "legend.frameon": True,         # 这种风格通常配有边框的图例
             "legend.edgecolor": "black",
+
+            # font size
+            "font.size": 11,
+            "axes.titlesize": 12,
+            "axes.labelsize": 12,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+            "legend.fontsize": 9,
         })
 
     def get_palette(self, levels):
@@ -164,6 +172,8 @@ def plot_breakdown_bar(summary_df: pd.DataFrame, stats_by_incast: dict, out_path
 
     style_manager = AcademicStyleManager()
 
+    my_platte = style_manager.get_palette(plot_df["legend_label"].unique())
+
     plt.figure(figsize=(4, 3))
     ax = sns.barplot(
         data=plot_df,
@@ -173,13 +183,13 @@ def plot_breakdown_bar(summary_df: pd.DataFrame, stats_by_incast: dict, out_path
         order=phase_order,
         hue_order=hue_order,
         #errorbar=None,
-        #palette=MY_COLORS[:len(incast_values)],
+        palette=my_platte
     )
     ax.set_yscale("log")
     ax.set_ylabel("99th percentile latency (us)")
     ax.set_xlabel("")
-    ax.grid(True, which="both", alpha=0.25)
-    ax.legend(title="# Incast Flows (Loss Rate)", ncol=2, frameon=True)
+    ax.grid(True, which="both", alpha=0.5)
+    ax.legend(title="# Incast Flows (Packet Loss Rate)", ncol=2, frameon=True)
 
     for spine in ax.spines.values():
         spine.set_linewidth(1.4)
@@ -211,8 +221,6 @@ def plot_phase_ccdf_2x2(
     fig, axes = plt.subplots(2, 2, figsize=(4, 3), sharey=True)
     axes = axes.flatten()
 
-    palette = sns.color_palette("deep", 2)
-
     # convert ns to us for better readability
     for df in [df0, df1]:
         for phase in phase_order:
@@ -225,11 +233,11 @@ def plot_phase_ccdf_2x2(
         x0, y0 = ecdf(vals0)
         x1, y1 = ecdf(vals1)
 
-        ax.plot(x0, 1.0 - y0, label=f"Incast={low_incast}", color=palette[0], linewidth=2)
-        ax.plot(x1, 1.0 - y1, label=f"Incast={high_incast}", color=palette[1], linewidth=2)
+        ax.plot(x0, 1.0 - y0, label=f"Incast={low_incast}", color="#0C4C8A", linewidth=2)
+        ax.plot(x1, 1.0 - y1, label=f"Incast={high_incast}", color="#CE5C00", linewidth=2)
 
         ax.set_yscale("log")
-        ax.grid(True, which="both", alpha=0.25)
+        ax.grid(True, which="both", alpha=0.5)
         ax.set_title(phase, fontsize=10)
 
         for spine in ax.spines.values():

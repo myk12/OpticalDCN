@@ -11,7 +11,8 @@ TARGETS := \
 	$(BUILD_DIR)/background_gen \
 	$(BUILD_DIR)/background_sink \
 	$(BUILD_DIR)/hopvar_sender \
-	$(BUILD_DIR)/hopvar_receiver
+	$(BUILD_DIR)/hopvar_receiver \
+	$(BUILD_DIR)/fct_pktgen_recv
 
 .PHONY: all clean dirs
 
@@ -19,6 +20,9 @@ all: dirs $(TARGETS)
 
 dirs:
 	mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/fct_pktgen_recv: $(SOURCE_DIR)/fct_pktgen_recv.c $(SOURCE_DIR)/config.h $(COMMON_OBJS)
+	$(CC) $(CFLAGS) $< $(COMMON_OBJS) -o $@
 
 $(BUILD_DIR)/config.o: $(SOURCE_DIR)/config.c $(SOURCE_DIR)/config.h
 	$(CC) $(CFLAGS) -c $< -o $@

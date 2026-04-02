@@ -21,6 +21,7 @@ NUM_LEAFS = 4
 NUM_OPTICAL_PORTS = 8
 
 hopvar_custom_forwarding_entries = [
+    (0, "00:0a:35:06:50:94", 3),
     (4, "00:0a:35:06:50:94", 3),
     (21, "00:0a:35:06:50:94", 22),
     (7, "00:0a:35:06:50:94", 5),
@@ -89,7 +90,12 @@ def program_eps_forwarding(bfrt, custom_forwarding_entries):
 
     n = 0
     for ingress_port, dst_mac, egress_port in custom_forwarding_entries:
-        dev_ig_port = get_dev_port(bfrt, f"{ingress_port}/0")  # Assuming channel 0 for simplicity
+        dev_ig_port = 0
+        if ingress_port == 0:
+            # Pktgen port
+            dev_ig_port = 6
+        else:
+            dev_ig_port = get_dev_port(bfrt, f"{ingress_port}/0")  # Assuming channel 0 for simplicity
         dev_eg_port = get_dev_port(bfrt, f"{egress_port}/0")
         ent = t.entry_with_set_ucast_port(
             ingress_port=dev_ig_port,

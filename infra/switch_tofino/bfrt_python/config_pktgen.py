@@ -15,17 +15,17 @@ logger.add(sys.stdout, level="INFO")
 ##########################################################################
 # Configuration Parameters
 ##########################################################################
-P4_PROG = os.getenv("P4_PROG", "spineleaf")
+P4_PROG = os.getenv("P4_PROG", "hybrid_arch")
 PKTGEN_APP_ID = int(os.getenv("PKTGEN_APP_ID", "1"))
 PKTGEN_PORT_ID = int(os.getenv("PKTGEN_PORT_ID", "6"))
 
 # Default for packet
-SRC_MAC = os.environ.get("SRC_MAC", "00:11:22:33:44:55")
-DST_MAC = os.environ.get("DST_MAC", "66:77:88:99:AA:BB")
-SRC_IP = os.environ.get("SRC_IP", "10.0.0.100")
-DST_IP = os.environ.get("DST_IP", "10.0.0.200")
-SRC_PORT = int(os.environ.get("SRC_PORT", "1234"))
-DST_PORT = int(os.environ.get("DST_PORT", "5678"))
+SRC_MAC = os.environ.get("SRC_MAC", "00:0a:35:06:50:95")
+DST_MAC = os.environ.get("DST_MAC", "00:0a:35:06:50:94")
+SRC_IP = os.environ.get("SRC_IP", "177.0.1.2")
+DST_IP = os.environ.get("DST_IP", "177.0.1.1")
+SRC_PORT = int(os.environ.get("SRC_PORT", "1999"))
+DST_PORT = int(os.environ.get("DST_PORT", "1999"))
 
 
 ###########################################################################

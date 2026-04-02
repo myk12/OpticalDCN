@@ -43,6 +43,7 @@ struct metadata_t {
     // for OCS
     bit<3> slot_id;
     bit<1> selected_spine; // ECMP: 0 = spine 1, 1 = spine 2
+    pktgen_timer_header_t pktgen_timer_hdr; // Pktgen timer header
 };
 
 // ---------------------------------------------------------------
@@ -59,6 +60,14 @@ parser IngressParser(packet_in packet,
 
     state start {
         tofino_parser.apply(packet, ig_intr_md);
+        transition select(ig_intr_md.ingress_port) {
+            6: parse_pktgen; // Port 6 is pktgen port
+            default: parse_ethernet;
+        }
+    }
+
+    state parse_pktgen {
+        packet.extract(ig_md.pktgen_timer_hdr);
         transition parse_ethernet;
     }
 
@@ -93,7 +102,6 @@ parser IngressParser(packet_in packet,
             default: accept;
         }
     }
-
 
     state parse_meas {
         packet.extract(hdr.meas);
@@ -214,6 +222,18 @@ control Ingress(
     }
 
     // -----------------------------------
+    // Sequencing of pktgen
+    // -----------------------------------
+    Register<bit<64>, bit<32>>(size = 10, initial_value = 0) pktgen_sequence_reg;
+    RegisterAction<bit<64>, bit<32>, bit<64>>(pktgen_sequence_reg) pktgen_sequence_fetch_add = {
+        void apply(inout bit<64> value, out bit<64> rv)
+        {
+            value = value + 1;
+            rv = value;
+        }
+    };
+
+    // -----------------------------------
     // Ingress Processing Logic
     // -----------------------------------
     apply {
@@ -227,6 +247,12 @@ control Ingress(
 
         if (hdr.meas.isValid()) {
             t_meas_ingress_timestamp.apply();
+        }
+
+        if (hdr.hopvar.isValid() && ig_intr_md.ingress_port == 6) {
+            bit<64> seq_num;
+            seq_num = pktgen_sequence_fetch_add.execute(0); // Increment sequence number for pktgen packets
+            hdr.hopvar.req_id = seq_num;
         }
 
         if (hdr.hopvar.isValid()) {
@@ -257,6 +283,7 @@ control Ingress(
 
             hdr.udp.checksum = 0;
         }
+
 
         if (ig_md.is_ocs == 1) {
             // compute slot id from global timestamp

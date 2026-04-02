@@ -49,6 +49,14 @@ class AcademicStyleManager:
             "savefig.bbox": "tight",
             "legend.frameon": True,         # 这种风格通常配有边框的图例
             "legend.edgecolor": "black",
+
+            # font size
+            "font.size": 11,
+            "axes.titlesize": 12,
+            "axes.labelsize": 12,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+            "legend.fontsize": 9,
         })
 
     def get_palette(self, levels):
@@ -237,7 +245,7 @@ def plot_mean_latency_vs_hop(summary_df: pd.DataFrame, out_path: Path):
         palette=MY_COLORS,
         linewidth=1.8,
         markersize=8,
-        ax=ax
+        ax=ax,
     )
     
     ax.set_xlabel("Hop Count (Number of Switches)", fontsize=11)
@@ -245,7 +253,8 @@ def plot_mean_latency_vs_hop(summary_df: pd.DataFrame, out_path: Path):
     
     ax.set_xticks(range(1, 8))
     
-    ax.legend(title="Payload (Bytes)", frameon=True, loc='upper left')
+    ax.legend(title="Packet Size (Bytes)", ncol=2, frameon=True, fontsize=9)
+    ax.grid(True, which="both", alpha=0.3, linestyle="--")
 
     for spine in ax.spines.values():
         spine.set_linewidth(1.4)
@@ -303,7 +312,7 @@ def plot_fit_overlay(long_df: pd.DataFrame, out_path: Path):
     ax.set_xlabel("Hop Count")
     ax.set_ylabel("Latency (ns)")
     ax.set_title("Linear fit of packet latency vs. hop count")
-    ax.grid(True)
+    ax.grid(True, which="both", alpha=0.3, linestyle="--")
     ax.legend(frameon=True, fontsize=9, ncol=2)
 
     for spine in ax.spines.values():

@@ -194,7 +194,7 @@ def plot_full_centered_cdf(all_data: dict, out_path: Path):
     plt.xlabel("Latency deviation from mean (ns)")
     plt.ylabel("CDF")
     plt.grid(True, alpha=0.25)
-    plt.legend(title="Payload / Mean", frameon=True, ncol=1)
+    plt.legend(title="Packet Size (Mean)", frameon=True, ncol=1)
 
     style_axis_ns(ax, major_step=major_step)
     
